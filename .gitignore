@@ -1,9 +1,68 @@
-﻿.env
-settings.json
-*.log
-*.txt
+﻿# البيئة الافتراضية
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# ملفات البايت كود
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+
+# ملفات النظام
 .DS_Store
 Thumbs.db
+
+# ملفات السجل
+*.log
+
+# ملفات إعدادات المستخدم
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ملفات البيئة
+.env
+*.env
+
+# نتائج مؤقتة
+*.tmp
+*.bak
+
+# ملفات OCR المؤقتة
+*.traineddata
+tessdata/
+output_ocr.txt
+temp_ocr_*
+
+# ملفات Qt Designer
+*.ui~
+*.qrc~
+*.autosave
+
+# ملفات تنسيق الصور الناتجة
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+
+# ملفات PDF الناتجة أو المؤقتة
+*.pdf
+
+# ملفات الترجمة من Qt
+*.qm
+*.ts
+
+# ملفات بيانات مؤقتة أو ناتجة عن التجارب
+*.csv
+*.json
+*.pickle
+*.pkl
+
+# ملفات pyinstaller
+build/
+dist/
+*.spec
