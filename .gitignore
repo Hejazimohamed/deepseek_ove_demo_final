@@ -30,6 +30,7 @@ Thumbs.db
 # نتائج مؤقتة
 *.tmp
 *.bak
+*.swp
 
 # ملفات OCR المؤقتة
 *.traineddata
@@ -66,3 +67,12 @@ temp_ocr_*
 build/
 dist/
 *.spec
+
+# ملفات غير مرغوب تتبعها في المشروع
+2222.txt
+defulte_Good_settings02.txt
+defulte_Good_settings03.txt
+github_command.txt
+ocr_issue_reports.txt
+oldmain_window.txt
+zip/
