@@ -53,25 +53,22 @@ class UpdateApplier(QThread):
                     downloaded += len(data)
                     if total_size > 0:
                         self.progress.emit(int((downloaded / total_size) * 100))
-            # 2. فك الضغط مع أخذ نسخة احتياطية
-            self.extract_and_backup()
+            # 2. نسخ جميع ملفات المشروع احتياطياً (قبل فك الضغط)
+            if not os.path.exists(self.backup_dir):
+                os.makedirs(self.backup_dir)
+            for fname in os.listdir(self.app_path):
+                fpath = os.path.join(self.app_path, fname)
+                if os.path.isfile(fpath) and fname != "update_temp.zip":
+                    shutil.copy2(fpath, os.path.join(self.backup_dir, fname))
+            # 3. فك الضغط
+            with zipfile.ZipFile(self.temp_zip, 'r') as zipf:
+                zipf.extractall(self.app_path)
+            # حذف ملف zip بعد النجاح
+            os.remove(self.temp_zip)
             self.finished.emit(True, "تم التحديث بنجاح! أعد تشغيل البرنامج.")
         except Exception as e:
             logging.error(f"فشل التحديث: {e}")
             self.finished.emit(False, f"فشل التحديث: {e}")
-
-    def extract_and_backup(self):
-        if not os.path.exists(self.backup_dir):
-            os.makedirs(self.backup_dir)
-        with zipfile.ZipFile(self.temp_zip, 'r') as zipf:
-            for member in zipf.namelist():
-                target_file = os.path.join(self.app_path, member)
-                # إذا الملف موجود، انقله للباك اب قبل الاستبدال
-                if os.path.isfile(target_file):
-                    shutil.copy2(target_file, os.path.join(self.backup_dir, member))
-                zipf.extract(member, self.app_path)
-        # حذف ملف zip بعد النجاح
-        os.remove(self.temp_zip)
 
 def prompt_user_for_update(changelog, parent=None):
     msg = QMessageBox(parent)

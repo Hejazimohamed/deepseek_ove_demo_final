@@ -76,3 +76,6 @@ github_command.txt
 ocr_issue_reports.txt
 oldmain_window.txt
 zip/
+
+# معلومات حساسة لا يجب تتبعها
+github_userpassword.txt
