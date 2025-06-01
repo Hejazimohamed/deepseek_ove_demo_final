@@ -1,0 +1,930 @@
+﻿
+# main.py
+import sys
+import logging
+import traceback
+
+# إعداد السجل لتسجيل جميع الأخطاء غير المتوقعة
+logging.basicConfig(
+    filename="ocr_app_errors.log",
+    filemode="a",
+    level=logging.ERROR,
+    format="%(asctime)s [%(levelname)s]: %(message)s"
+)
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """تسجيل أي استثناء غير معالج"""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+# ربط handler بالنظام
+sys.excepthook = handle_exception
+
+# تسجيل رسائل PyQt (critical/warning/fatal)
+try:
+    from PyQt5.QtCore import qInstallMessageHandler
+    from PyQt5.QtCore import QtMsgType
+
+    def qt_message_handler(mode, context, message):
+        if mode == QtMsgType.QtCriticalMsg:
+            logging.error(f"QtCriticalMsg: {message}")
+        elif mode == QtMsgType.QtWarningMsg:
+            logging.warning(f"QtWarningMsg: {message}")
+        elif mode == QtMsgType.QtFatalMsg:
+            logging.error(f"QtFatalMsg: {message}")
+        # يمكن تسجيل الرسائل العادية أيضًا لو أردت
+
+    qInstallMessageHandler(qt_message_handler)
+except Exception as e:
+    logging.warning("qInstallMessageHandler غير مدعومة في هذا الإصدار أو حدث خطأ.")
+
+from PyQt5.QtWidgets import QApplication
+from main_window import OCRMainWindow
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = OCRMainWindow()
+    win.show()
+    sys.exit(app.exec_())
+----------------------------------------------
+# main_window.py
+import sys
+import logging
+import smtplib
+from email.mime.text import MIMEText
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QLabel, QFileDialog, QTextEdit, QComboBox, QProgressBar, QMessageBox, QLineEdit,
+    QInputDialog, QCheckBox, QSizePolicy
+)
+from PyQt5.QtGui import QPixmap, QImage, QFont
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PIL import Image, ImageEnhance
+from pdf2image import convert_from_path
+import numpy as np
+import cv2
+from updater import UpdateChecker, UpdateApplier, prompt_user_for_update
+from PyQt5.QtWidgets import QProgressDialog
+import json
+
+def get_local_version():
+    try:
+        with open("local_version.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("version", "0.0.0")
+    except Exception:
+        return "0.0.0"
+
+
+
+# ========== إعدادات البريد ==========
+SMTP_USER = "hejazi.mohamed@gmail.com"
+SMTP_PASSWORD = "obxc irve putg epvq"  # App Password
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+TO_EMAIL = "hejazi.mohamed@gmail.com"
+
+def send_email(subject, body, to_email=TO_EMAIL):
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USER
+    msg["To"] = to_email
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+    except Exception as e:
+        print(f"فشل في إرسال الإيميل: {e}")
+
+# ========== باقي الكود (EasyOCR، Preprocess... الخ، بدون تغيير) ==========
+
+def is_easyocr_enabled():
+    try:
+        with open("config.txt", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("enable_easyocr"):
+                    return line.strip().split("=")[1].strip() == "1"
+    except Exception:
+        return False
+    return False
+
+class EasyOCRSingleton:
+    _instance = None
+    _langs = None
+
+    @classmethod
+    def get_reader(cls, langs):
+        import easyocr
+        if cls._instance is None or cls._langs != langs:
+            cls._instance = easyocr.Reader(langs, gpu=False, verbose=False)
+            cls._langs = langs
+        return cls._instance
+
+def preprocess_image_advanced(pil_img):
+    try:
+        img_gray = pil_img.convert('L')
+        img_enhanced = ImageEnhance.Contrast(img_gray).enhance(2.5)
+        img_bright = ImageEnhance.Brightness(img_enhanced).enhance(1.15)
+        img_sharp = ImageEnhance.Sharpness(img_bright).enhance(2.0)
+        img_np = np.array(img_sharp)
+        img_denoised = cv2.fastNlMeansDenoising(img_np, None, 24, 7, 21)
+        _, img_bw = cv2.threshold(img_denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return Image.fromarray(img_bw)
+    except Exception as ex:
+        logging.error(f"preprocess_image_advanced error: {ex}")
+        return pil_img
+
+class OCRWorker(QThread):
+    progress = pyqtSignal(int, int)
+    result = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, file_path, engine, lang, roi_rel=None, rotation=0, enhance=False):
+        super().__init__()
+        self.file_path = file_path
+        self.engine = engine
+        self.lang = lang
+        self.roi_rel = roi_rel
+        self._cancelled = False
+        self.rotation = rotation
+        self.enhance = enhance
+
+    def run(self):
+        try:
+            result_texts = []
+            langs = []
+            if "ara" in self.lang:
+                langs.append("ar")
+            if "eng" in self.lang:
+                langs.append("en")
+            if not langs:
+                langs = ["en"]
+            reader = None
+            if self.engine in ["EasyOCR", "كلاهما"]:
+                try:
+                    reader = EasyOCRSingleton.get_reader(langs)
+                except Exception as ex:
+                    self.error.emit(f"خطأ في تهيئة EasyOCR: {ex}")
+                    return
+            custom_config = r'--oem 3 --psm 6'
+            if self.file_path.lower().endswith('.pdf'):
+                try:
+                    images = convert_from_path(self.file_path, dpi=150)
+                except Exception as ex:
+                    self.error.emit(f"خطأ في تحويل PDF إلى صور: {ex}")
+                    return
+                total_pages = len(images)
+                for idx, img in enumerate(images):
+                    if self._cancelled:
+                        self.error.emit("تم إلغاء المعالجة من قبل المستخدم.")
+                        return
+                    if self.rotation:
+                        img = img.rotate(-self.rotation, expand=True)
+                    if self.roi_rel:
+                        w, h = img.size
+                        x_rel, y_rel, w_rel, h_rel = self.roi_rel
+                        left = int(x_rel * w)
+                        top = int(y_rel * h)
+                        right = left + int(w_rel * w)
+                        bottom = top + int(h_rel * h)
+                        img = img.crop((left, top, right, bottom))
+                    if self.enhance:
+                        img_proc = preprocess_image_advanced(img)
+                    else:
+                        img_proc = img
+                    if self.engine in ["Tesseract", "كلاهما"]:
+                        try:
+                            import pytesseract
+                            text_tess = pytesseract.image_to_string(img_proc, lang=self.lang, config=custom_config)
+                        except Exception as ex:
+                            text_tess = f"[خطأ Tesseract]: {ex}"
+                        result_texts.append((f"Tesseract صفحة {idx+1}", text_tess.strip()))
+                    if self.engine in ["EasyOCR", "كلاهما"] and reader:
+                        try:
+                            img_np = np.array(img_proc)
+                            result = reader.readtext(img_np, detail=0, paragraph=True)
+                            text_easy = "\n".join(result).strip()
+                        except Exception as ex:
+                            text_easy = f"[خطأ EasyOCR]: {ex}"
+                        result_texts.append((f"EasyOCR صفحة {idx+1}", text_easy))
+                    self.progress.emit(idx + 1, total_pages)
+                text_parts = []
+                for name, text in result_texts:
+                    text_parts.append(f"--- {name} ---\n{text}")
+                self.result.emit("\n\n".join(text_parts).strip())
+            else:
+                try:
+                    im = Image.open(self.file_path)
+                except Exception as ex:
+                    self.error.emit(f"خطأ في فتح الصورة: {ex}")
+                    return
+                if self.rotation:
+                    im = im.rotate(-self.rotation, expand=True)
+                self.progress.emit(1, 2)
+                if self.roi_rel:
+                    w, h = im.size
+                    x_rel, y_rel, w_rel, h_rel = self.roi_rel
+                    left = int(x_rel * w)
+                    top = int(y_rel * h)
+                    right = left + int(w_rel * w)
+                    bottom = top + int(h_rel * h)
+                    im = im.crop((left, top, right, bottom))
+                if self.enhance:
+                    im_proc = preprocess_image_advanced(im)
+                else:
+                    im_proc = im
+                if self.engine in ["Tesseract", "كلاهما"]:
+                    try:
+                        import pytesseract
+                        text_tess = pytesseract.image_to_string(im_proc, lang=self.lang, config=custom_config)
+                    except Exception as ex:
+                        text_tess = f"[خطأ Tesseract]: {ex}"
+                    result_texts.append(("Tesseract", text_tess.strip()))
+                if self.engine in ["EasyOCR", "كلاهما"] and reader:
+                    try:
+                        img_np = np.array(im_proc)
+                        result = reader.readtext(img_np, detail=0, paragraph=True)
+                        text_easy = "\n".join(result).strip()
+                    except Exception as ex:
+                        text_easy = f"[خطأ EasyOCR]: {ex}"
+                    result_texts.append(("EasyOCR", text_easy))
+                self.progress.emit(2, 2)
+                text_parts = []
+                for name, text in result_texts:
+                    text_parts.append(f"--- {name} ---\n{text}")
+                self.result.emit("\n\n".join(text_parts).strip())
+        except Exception as e:
+            self.error.emit(str(e))
+
+    def cancel(self):
+        self._cancelled = True
+
+class OCRMainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        screen = QApplication.primaryScreen()
+        screen_size = screen.size()
+        width = int(screen_size.width() * 0.7)
+        height = int(screen_size.height() * 0.7)
+        self.resize(width, height)
+        self.setMinimumSize(900, 550)
+
+        self.file_path = ""
+        self.roi_rel = None
+        self.ocr_thread = None
+        self.current_image_rotation = 0
+        self.init_ui()
+
+        # إرسال تقرير دوري كل ساعة
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self.send_periodic_status)
+        self.status_timer.start(60 * 60 * 1000)  # كل ساعة
+
+    def init_ui(self):
+        central_widget = QWidget()
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(7)
+        main_layout.setContentsMargins(18, 12, 18, 7)
+
+        # العنوان
+        title_row = QHBoxLayout()
+        title_row.addStretch(1)
+        self.title_label = QLabel("OCR الذكي (عربي / إنجليزي)")
+        self.title_label.setFont(QFont("Arial", 19, QFont.Bold))
+        self.title_label.setMinimumHeight(44)
+        title_row.addWidget(self.title_label)
+        main_layout.addLayout(title_row)
+
+        main_content_row = QHBoxLayout()
+        main_content_row.setSpacing(18)
+
+        # العمود الأيسر
+        left_col = QVBoxLayout()
+        left_col.setSpacing(14)
+        left_col.setContentsMargins(0, 0, 0, 0)
+        self.preview_label = QLabel()
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setFixedSize(180, 180)
+        self.preview_label.setStyleSheet("border: 1px solid #E0E0E0; background: #fff; border-radius: 10px;")
+        left_col.addWidget(self.preview_label)
+        left_col.addSpacing(10)
+        btn_row = QHBoxLayout()
+        self.import_btn = QPushButton("استيراد صورة أو PDF")
+        self.import_btn.setMinimumHeight(28)
+        self.import_btn.setMinimumWidth(130)
+        self.import_btn.clicked.connect(self.import_file)
+        btn_row.addWidget(self.import_btn)
+        self.rotate_btn = QPushButton("🔄 تدوير الصورة")
+        self.rotate_btn.setMinimumHeight(28)
+        self.rotate_btn.setMinimumWidth(120)
+        self.rotate_btn.clicked.connect(self.rotate_image)
+        btn_row.addWidget(self.rotate_btn)
+        btn_row.addStretch(1)
+        left_col.addLayout(btn_row)
+        self.enhance_checkbox = QCheckBox("تفعيل تحسين الصورة (للنص المشوش)")
+        self.enhance_checkbox.setChecked(False)
+        left_col.addWidget(self.enhance_checkbox)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFixedHeight(24)
+        left_col.addWidget(self.progress_bar)
+
+        lang_row = QHBoxLayout()
+        lang_label = QLabel("اللغة:")
+        lang_label.setMinimumWidth(48)
+        lang_row.addWidget(lang_label)
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["ara+eng", "ara", "eng"])
+        lang_row.addWidget(self.lang_combo)
+        left_col.addLayout(lang_row)
+
+        engine_row = QHBoxLayout()
+        engine_label = QLabel("المحرك:")
+        engine_label.setMinimumWidth(48)
+        engine_row.addWidget(engine_label)
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItem("Tesseract")
+        if is_easyocr_enabled():
+            self.engine_combo.addItem("EasyOCR")
+            self.engine_combo.addItem("كلاهما")
+        engine_row.addWidget(self.engine_combo)
+        left_col.addLayout(engine_row)
+        left_col.addStretch(1)
+        logo_widget = QWidget()
+        logo_layout = QVBoxLayout(logo_widget)
+        logo_layout.setContentsMargins(0, 0, 0, 0)
+        logo_layout.setSpacing(2)
+        logo_label = QLabel()
+        logo_pixmap = QPixmap("logos.png")
+        if not logo_pixmap.isNull():
+            logo_pixmap = logo_pixmap.scaled(62, 62, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            logo_label.setPixmap(logo_pixmap)
+        logo_label.setAlignment(Qt.AlignCenter)
+        logo_layout.addWidget(logo_label)
+        benghazi_label = QLabel("LES Benghazi")
+        benghazi_label.setAlignment(Qt.AlignCenter)
+        logo_layout.addWidget(benghazi_label)
+        arabic_label = QLabel("نقابة المهن الهندسية بنغازي")
+        arabic_label.setAlignment(Qt.AlignCenter)
+        logo_layout.addWidget(arabic_label)
+        self.report_btn = QPushButton("إبلاغ عن مشكلة")
+        self.report_btn.setStyleSheet("background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 8px; font-weight: bold; font-size: 11pt;")
+        self.report_btn.clicked.connect(self.report_issue)
+        logo_layout.addWidget(self.report_btn)
+        left_col.addWidget(logo_widget)
+        main_content_row.addLayout(left_col, 0)
+
+        # العمود الأيمن (معالجة مشكلة التداخل وتوزيع الحجم)
+        right_col = QVBoxLayout()
+        right_col.setSpacing(10)
+        right_col.setContentsMargins(0, 0, 0, 0)
+        self.result_edit = QTextEdit()
+        self.result_edit.setPlaceholderText("سيظهر النص المستخرج هنا بعد المعالجة...")
+        self.result_edit.setMinimumWidth(420)
+        self.result_edit.setMaximumWidth(650)
+        self.result_edit.setMinimumHeight(330)
+        self.result_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_col.addWidget(self.result_edit, 2)
+
+        buttons_row = QHBoxLayout()
+        self.process_btn = QPushButton("ابدأ المعالجة")
+        self.process_btn.clicked.connect(self.start_ocr)
+        self.process_btn.setEnabled(False)
+        buttons_row.addWidget(self.process_btn)
+        self.save_btn = QPushButton("حفظ النص")
+        self.save_btn.clicked.connect(self.save_text)
+        self.save_btn.setEnabled(False)
+        buttons_row.addWidget(self.save_btn)
+        self.cancel_btn = QPushButton("إلغاء")
+        self.cancel_btn.clicked.connect(self.cancel_ocr)
+        self.cancel_btn.setEnabled(False)
+        buttons_row.addWidget(self.cancel_btn)
+        buttons_row.addStretch(1)
+        right_col.addLayout(buttons_row)
+        main_content_row.addLayout(right_col, 1)
+        main_layout.addLayout(main_content_row)
+
+        footer_row = QHBoxLayout()
+        footer_row.addStretch(1)
+        self.email_footer = QLabel('E-mail: hejazi.mohamed@gmail.com')
+        footer_row.addWidget(self.email_footer)
+        self.whatsapp_footer = QLabel('واتساب: 0927232437')
+        footer_row.addWidget(self.whatsapp_footer)
+        footer_row.addSpacing(16)
+        self.phone_edit = QLineEdit()
+        self.phone_edit.setPlaceholderText("رقم الهاتف (اختياري)")
+        self.phone_edit.setMinimumWidth(120)
+        footer_row.addWidget(self.phone_edit)
+        self.email_edit = QLineEdit()
+        self.email_edit.setPlaceholderText("البريد الإلكتروني (اختياري)")
+        self.email_edit.setMinimumWidth(200)
+        footer_row.addWidget(self.email_edit)
+        main_layout.addLayout(footer_row)
+        
+        self.update_btn = QPushButton("🔄 تحديث التطبيق")
+        self.update_btn.setStyleSheet("background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; border-radius: 8px; font-weight: bold; font-size: 11pt;")
+        self.update_btn.clicked.connect(self.check_for_updates)
+
+        left_col.addWidget(self.update_btn)
+        self.setCentralWidget(central_widget)
+
+    def import_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "استيراد صورة أو PDF", "",
+            "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff *.tif);;PDF Files (*.pdf)"
+        )
+        if file_path:
+            self.file_path = file_path
+            self.current_image_rotation = 0
+            self.show_preview(file_path)
+            self.process_btn.setEnabled(True)
+            self.save_btn.setEnabled(False)
+            self.result_edit.setPlainText("")
+
+    def rotate_image(self):
+        if self.file_path:
+            self.current_image_rotation = (self.current_image_rotation + 90) % 360
+            self.show_preview(self.file_path)
+
+    def show_preview(self, file_path):
+        try:
+            if file_path.lower().endswith('.pdf'):
+                images = convert_from_path(file_path, first_page=1, last_page=1, dpi=100)
+                img = images[0]
+            else:
+                img = Image.open(file_path)
+            if self.current_image_rotation:
+                img = img.rotate(-self.current_image_rotation, expand=True)
+            img.thumbnail((200, 200))
+            data = img.convert("RGB").tobytes("raw", "RGB")
+            qimg = QImage(data, img.size[0], img.size[1], QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            self.preview_label.setPixmap(pixmap)
+        except Exception as e:
+            self.preview_label.setText("خطأ في المعاينة!")
+
+    def start_ocr(self):
+        self.progress_bar.setValue(0)
+        self.result_edit.setPlainText("")
+        self.process_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
+        self.ocr_thread = OCRWorker(
+            self.file_path,
+            self.engine_combo.currentText(),
+            self.lang_combo.currentText(),
+            self.roi_rel,
+            self.current_image_rotation,
+            self.enhance_checkbox.isChecked()
+        )
+        self.ocr_thread.progress.connect(self.update_progress)
+        self.ocr_thread.result.connect(self.ocr_finished)
+        self.ocr_thread.error.connect(self.handle_error)
+        self.ocr_thread.start()
+
+    def update_progress(self, current, total):
+        percent = int((current / total) * 100)
+        self.progress_bar.setValue(percent)
+
+    def ocr_finished(self, text):
+        self.result_edit.setPlainText(text)
+        self.process_btn.setEnabled(True)
+        self.save_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
+
+    def handle_error(self, error_msg):
+        self.result_edit.setPlainText("حدث خطأ أثناء استخراج النص:\n" + error_msg)
+        self.process_btn.setEnabled(True)
+        self.save_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(False)
+        # إرسال بريد للإدارة فور حدوث خطأ
+        send_email(
+            "OCR App Error",
+            f"تم رصد خطأ في التطبيق:\n{error_msg}"
+        )
+
+    def cancel_ocr(self):
+        if self.ocr_thread is not None:
+            self.ocr_thread.cancel()
+        self.cancel_btn.setEnabled(False)
+
+    def save_text(self):
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "حفظ النص", "", "Text Files (*.txt);;All Files (*)"
+        )
+        if filename:
+            try:
+                with open(filename, "w", encoding="utf-8") as f:
+                    f.write(self.result_edit.toPlainText())
+                QMessageBox.information(self, "تم الحفظ", "تم حفظ النص بنجاح.")
+            except Exception as e:
+                QMessageBox.critical(self, "خطأ", f"لم يتم حفظ النص:\n{e}")
+
+    def report_issue(self):
+        text, ok = QInputDialog.getMultiLineText(self, "إبلاغ عن مشكلة", "يرجى وصف المشكلة أو الخطأ:")
+        if ok and text.strip():
+            try:
+                with open("ocr_issue_reports.txt", "a", encoding="utf-8") as f:
+                    f.write(f"\n---\nبلاغ جديد:\n{text.strip()}\n")
+                send_email(
+                    "OCR Issue Report",
+                    f"بلاغ جديد من المستخدم:\n{text.strip()}"
+                )
+                QMessageBox.information(self, "تم الإرسال", "تم تسجيل البلاغ وإرساله بالإيميل.")
+            except Exception as e:
+                QMessageBox.critical(self, "خطأ", f"لم يتم تسجيل البلاغ أو إرسال الإيميل:\n{e}")
+
+
+    def check_for_updates(self):
+        current_version = get_local_version()  # يتم قراءته من local_version.json
+        self.update_thread = UpdateChecker(current_version)
+        self.update_thread.update_available.connect(self.handle_update_result)
+        self.update_thread.start()
+
+    def handle_update_result(self, is_newer, changelog):
+        if is_newer:
+            agree = prompt_user_for_update(changelog, self)
+            if agree:
+                self.download_update()
+        else:
+            QMessageBox.information(self, "لا يوجد تحديث", "أنت تستخدم آخر إصدار متاح.")
+
+    def download_update(self):
+        update_url = "https://github.com/Hejazimohamed/ocr-update_final/releases/latest/download/update_temp.zip"
+        self.progress_dialog = QProgressDialog("جاري تحميل التحديث...", "إلغاء", 0, 100, self)
+        self.progress_dialog.setWindowTitle("تحميل التحديث")
+        self.progress_dialog.setWindowModality(Qt.WindowModal)
+        self.progress_dialog.setValue(0)
+
+        self.applier_thread = UpdateApplier(update_url)
+        self.applier_thread.progress.connect(self.progress_dialog.setValue)
+        self.applier_thread.finished.connect(self.finish_update)
+        self.progress_dialog.canceled.connect(self.applier_thread.terminate)
+        self.applier_thread.start()
+        self.progress_dialog.exec_()
+
+    def finish_update(self, success):
+        if success:
+            QMessageBox.information(self, "✅ تم التحميل", "تم تحميل التحديث بنجاح في الملف: update_temp.zip\nيرجى فك الضغط واستبدال الملفات يدوياً.")
+        else:
+            QMessageBox.critical(self, "❌ فشل", "حدث خطأ أثناء تحميل التحديث.")
+
+    def send_periodic_status(self):
+        send_email(
+            "OCR App Status",
+            "التطبيق يعمل بشكل سليم ولا توجد مشاكل مسجلة في الساعة الماضية."
+        )
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = OCRMainWindow()
+    win.show()
+    sys.exit(app.exec_())
+-------------------------------------
+ocr_app_errors.log
+-------------------------------
+ocr_issue_reports.txt
+
+---
+بلاغ جديد:
+خشت مشتك فتاتوتا
+
+---
+بلاغ جديد:
+2025-05-18 04:17:01,154 [ERROR]: ERROR in init_ui: 'OCRMainWindow' object has no attribute 'import_file'
+Traceback (most recent call last):
+  File "C:\Deepseek_ove_demo\main_window.py", line 43, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Deepseek_ove_demo\main_window.py", line 313, in init_ui
+    self.import_btn.clicked.connect(self.import_file)
+AttributeError: 'OCRMainWindow' object has no attribute 'import_file'
+
+2025-05-19 01:21:23,472 [ERROR]: OCRWorker started
+2025-05-19 01:21:25,731 [ERROR]: Starting EasyOCR Reader initialization (langs=['ar', 'en'])
+2025-05-19 01:21:31,165 [ERROR]: EasyOCRSingleton: Creating new Reader for langs=['ar', 'en']
+2025-05-19 01:21:45,784 [ERROR]: EasyOCRSingleton: Reader created
+2025-05-19 01:21:45,784 [ERROR]: EasyOCR Reader initialized in 20.05 seconds
+2025-05-19 01:21:45,784 [ERROR]: Image detected, opening image...
+2025-05-19 01:21:45,785 [ERROR]: Image opened successfully
+2025-05-19 01:21:45,816 [ERROR]: Calling EasyOCR readtext for image
+2025-05-19 01:29:30,047 [ERROR]: OCRWorker started
+2025-05-19 01:29:30,387 [ERROR]: Image detected, opening image...
+2025-05-19 01:29:30,388 [ERROR]: Image opened successfully
+2025-05-19 01:49:06,556 [ERROR]: OCRWorker started
+2025-05-19 01:49:06,557 [ERROR]: Image detected, opening image...
+2025-05-19 01:49:06,558 [ERROR]: Image opened successfully
+2025-05-19 01:50:04,281 [ERROR]: OCRWorker started
+2025-05-19 01:50:04,281 [ERROR]: Image detected, opening image...
+2025-05-19 01:50:04,282 [ERROR]: Image opened successfully
+2025-05-19 01:58:06,813 [ERROR]: OCRWorker started
+2025-05-19 01:58:06,813 [ERROR]: Image detected, opening image...
+2025-05-19 01:58:06,814 [ERROR]: Image opened successfully
+2025-05-19 01:58:17,403 [ERROR]: OCRWorker started
+2025-05-19 01:58:17,404 [ERROR]: Image detected, opening image...
+2025-05-19 01:58:17,404 [ERROR]: Image opened successfully
+
+---
+بلاغ جديد:
+2025-05-18 04:17:01,154 [ERROR]: ERROR in init_ui: 'OCRMainWindow' object has no attribute 'import_file'
+Traceback (most recent call last):
+  File "C:\Deepseek_ove_demo\main_window.py", line 43, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Deepseek_ove_demo\main_window.py", line 313, in init_ui
+    self.import_btn.clicked.connect(self.import_file)
+AttributeError: 'OCRMainWindow' object has no attribute 'import_file'
+
+2025-05-19 01:21:23,472 [ERROR]: OCRWorker started
+2025-05-19 01:21:25,731 [ERROR]: Starting EasyOCR Reader initialization (langs=['ar', 'en'])
+2025-05-19 01:21:31,165 [ERROR]: EasyOCRSingleton: Creating new Reader for langs=['ar', 'en']
+2025-05-19 01:21:45,784 [ERROR]: EasyOCRSingleton: Reader created
+2025-05-19 01:21:45,784 [ERROR]: EasyOCR Reader initialized in 20.05 seconds
+2025-05-19 01:21:45,784 [ERROR]: Image detected, opening image...
+2025-05-19 01:21:45,785 [ERROR]: Image opened successfully
+2025-05-19 01:21:45,816 [ERROR]: Calling EasyOCR readtext for image
+2025-05-19 01:29:30,047 [ERROR]: OCRWorker started
+2025-05-19 01:29:30,387 [ERROR]: Image detected, opening image...
+2025-05-19 01:29:30,388 [ERROR]: Image opened successfully
+2025-05-19 01:49:06,556 [ERROR]: OCRWorker started
+2025-05-19 01:49:06,557 [ERROR]: Image detected, opening image...
+2025-05-19 01:49:06,558 [ERROR]: Image opened successfully
+2025-05-19 01:50:04,281 [ERROR]: OCRWorker started
+2025-05-19 01:50:04,281 [ERROR]: Image detected, opening image...
+2025-05-19 01:50:04,282 [ERROR]: Image opened successfully
+2025-05-19 01:58:06,813 [ERROR]: OCRWorker started
+2025-05-19 01:58:06,813 [ERROR]: Image detected, opening image...
+2025-05-19 01:58:06,814 [ERROR]: Image opened successfully
+2025-05-19 01:58:17,403 [ERROR]: OCRWorker started
+2025-05-19 01:58:17,404 [ERROR]: Image detected, opening image...
+2025-05-19 01:58:17,404 [ERROR]: Image opened successfully
+2025-05-19 04:22:52,787 [ERROR]: Uncaught exception
+Traceback (most recent call last):
+  File "C:\Deepseek_ove_demo\main.py", line 42, in <module>
+    from main_window import OCRMainWindow
+  File "C:\Deepseek_ove_demo\main_window.py", line 244
+    self.enhance_checkbox = QCheckBox("\u062a\u0641\u0639\u064a\u0644 \u062a\u062d\u0633\u064a\u0646 \u0627\u0644\u0635\u0648\u0631\u0629 (\u0644\u0644\u0646\u0635 \u0627\u0644\u0645\u0634\u0648\u0634)")
+IndentationError: unexpected indent
+2025-05-19 04:23:01,502 [ERROR]: Uncaught exception
+Traceback (most recent call last):
+  File "C:\Deepseek_ove_demo\main.py", line 42, in <module>
+    from main_window import OCRMainWindow
+  File "C:\Deepseek_ove_demo\main_window.py", line 244
+    self.enhance_checkbox = QCheckBox("\u062a\u0641\u0639\u064a\u0644 \u062a\u062d\u0633\u064a\u0646 \u0627\u0644\u0635\u0648\u0631\u0629 (\u0644\u0644\u0646\u0635 \u0627\u0644\u0645\u0634\u0648\u0634)")
+IndentationError: unexpected indent
+
+---
+بلاغ جديد:
+cngdjffz
+-------------------------------------------------
+requirements.txt
+PyQt5==5.15.6
+pdf2image==1.16.3
+Pillow==9.5.0
+------------------------------
+settings.json
+{
+    "language": "ara+eng",
+    "engine": "Tesseract",
+    "auto_update": true
+}
+-------------------------------------
+# settings_dialog.py
+
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QCheckBox
+
+class SettingsDialog(QDialog):
+    def __init__(self, settings_manager):
+        super().__init__()
+        self.setWindowTitle("الإعدادات")
+        self.settings = settings_manager
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+
+        # اختيار اللغة
+        lang_layout = QHBoxLayout()
+        lang_label = QLabel("اللغة:")
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["ara+eng", "ara", "eng"])
+        self.lang_combo.setCurrentText(self.settings.get("language"))
+        lang_layout.addWidget(lang_label)
+        lang_layout.addWidget(self.lang_combo)
+        layout.addLayout(lang_layout)
+
+        # اختيار المحرك
+        engine_layout = QHBoxLayout()
+        engine_label = QLabel("المحرك:")
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItems(["Tesseract", "EasyOCR", "كلاهما"])
+        self.engine_combo.setCurrentText(self.settings.get("engine"))
+        engine_layout.addWidget(engine_label)
+        engine_layout.addWidget(self.engine_combo)
+        layout.addLayout(engine_layout)
+
+        # خيار التحديث التلقائي
+        self.auto_update_check = QCheckBox("تفعيل التحديث التلقائي")
+        self.auto_update_check.setChecked(self.settings.get("auto_update"))
+        layout.addWidget(self.auto_update_check)
+
+        # أزرار الحفظ والإلغاء
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("حفظ")
+        cancel_btn = QPushButton("إلغاء")
+        save_btn.clicked.connect(self.save_settings)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def save_settings(self):
+        self.settings.set("language", self.lang_combo.currentText())
+        self.settings.set("engine", self.engine_combo.currentText())
+        self.settings.set("auto_update", self.auto_update_check.isChecked())
+        self.accept()
+-----------------------------------------
+
+# settings_manager.py
+
+import json
+
+class SettingsManager:
+    def __init__(self, file_path='settings.json'):
+        self.file_path = file_path
+        self.settings = {
+            "language": "ara+eng",
+            "engine": "Tesseract",
+            "auto_update": True
+        }
+        self.load()
+
+    def load(self):
+        try:
+            with open(self.file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                self.settings.update(data)
+        except FileNotFoundError:
+            self.save()
+
+    def save(self):
+        with open(self.file_path, "w", encoding="utf-8") as f:
+            json.dump(self.settings, f, indent=4, ensure_ascii=False)
+
+    def get(self, key):
+        return self.settings.get(key)
+
+    def set(self, key, value):
+        self.settings[key] = value
+        self.save()
+-----------------------------------------------
+# update_zipper.py
+
+import sys
+import os
+import zipfile
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog,
+    QLabel, QListWidget, QMessageBox
+)
+
+class UpdateZipper(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("منشئ التحديث - ضغط الملفات")
+        self.setGeometry(100, 100, 500, 400)
+
+        self.layout = QVBoxLayout()
+
+        self.label = QLabel("اختر الملفات التي تريد إضافتها للتحديث:")
+        self.layout.addWidget(self.label)
+
+        self.file_list = QListWidget()
+        self.layout.addWidget(self.file_list)
+
+        self.add_btn = QPushButton("➕ إضافة ملفات")
+        self.add_btn.clicked.connect(self.add_files)
+        self.layout.addWidget(self.add_btn)
+
+        self.clear_btn = QPushButton("🧹 مسح القائمة")
+        self.clear_btn.clicked.connect(self.clear_files)
+        self.layout.addWidget(self.clear_btn)
+
+        self.zip_btn = QPushButton("📦 إنشاء update_temp.zip")
+        self.zip_btn.clicked.connect(self.create_zip)
+        self.layout.addWidget(self.zip_btn)
+
+        self.setLayout(self.layout)
+
+    def add_files(self):
+        files, _ = QFileDialog.getOpenFileNames(self, "اختر الملفات", "", "All Files (*)")
+        for f in files:
+            if f not in [self.file_list.item(i).text() for i in range(self.file_list.count())]:
+                self.file_list.addItem(f)
+
+    def clear_files(self):
+        self.file_list.clear()
+
+    def create_zip(self):
+        if self.file_list.count() == 0:
+            QMessageBox.warning(self, "تحذير", "لم يتم تحديد أي ملفات.")
+            return
+
+        zip_path = os.path.join(os.getcwd(), "update_temp.zip")
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for i in range(self.file_list.count()):
+                file_path = self.file_list.item(i).text()
+                arcname = os.path.basename(file_path)
+                zipf.write(file_path, arcname)
+
+        QMessageBox.information(self, "تم", f"تم إنشاء الملف:\\n{zip_path}")
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = UpdateZipper()
+    win.show()
+    sys.exit(app.exec_())
+-----------------------------------------------
+
+# updater.py
+
+import json
+import requests
+import logging
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtWidgets import QMessageBox, QProgressDialog
+
+
+class UpdateChecker(QThread):
+    update_available = pyqtSignal(bool, str)
+
+    def __init__(self, current_version):
+        super().__init__()
+        self.current_version = current_version
+        self.latest_version = None
+        self.changelog = ""
+
+    def run(self):
+        try:
+            response = requests.get(
+                "https://raw.githubusercontent.com/Hejazimohamed/ocr-update_final/main/version.json",
+                timeout=10
+            )
+            data = response.json()
+            self.latest_version = data.get("version")
+            self.changelog = data.get("changelog", "")
+
+            is_newer = self.latest_version > self.current_version
+            self.update_available.emit(is_newer, self.changelog)
+        except Exception as e:
+            logging.error(f"فشل التحقق من التحديث: {e}")
+
+
+class UpdateApplier(QThread):
+    progress = pyqtSignal(int)
+    finished = pyqtSignal(bool)
+
+    def __init__(self, update_url):
+        super().__init__()
+        self.update_url = update_url
+
+    def run(self):
+        try:
+            response = requests.get(self.update_url, stream=True)
+            total_size = int(response.headers.get("content-length", 0))
+            temp_path = "update_temp.zip"
+            with open(temp_path, "wb") as f:
+                downloaded = 0
+                for data in response.iter_content(chunk_size=4096):
+                    f.write(data)
+                    downloaded += len(data)
+                    self.progress.emit(int((downloaded / total_size) * 100))
+            self.finished.emit(True)
+        except Exception as e:
+            logging.error(f"فشل التحديث: {e}")
+            self.finished.emit(False)
+
+
+def prompt_user_for_update(changelog, parent=None):
+    msg = QMessageBox(parent)
+    msg.setIcon(QMessageBox.Information)
+    msg.setWindowTitle("تحديث متوفر")
+    msg.setText("تحديث جديد متوفر!")
+    msg.setInformativeText(f"سجل التغييرات:\n{changelog}\n\nهل تريد المتابعة بالتحديث؟")
+    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+    return msg.exec_() == QMessageBox.Yes
+---------------------------------------------------------------
+version.json
+{
+    "version": "1.1.0",
+    "changelog": "🆕 تم تحسين دقة التعرف على النصوص.\n🐞 تم إصلاح مشكلة في قراءة ملفات PDF.\n⚙️ تحسين الأداء العام."
+}
+-----------------------------
+
+

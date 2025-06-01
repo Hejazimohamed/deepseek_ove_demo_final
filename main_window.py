@@ -20,14 +20,8 @@ import cv2
 from backup_manager import BackupManager
 from settings_manager import SettingsManager
 from updater import UpdateChecker, UpdateApplier, prompt_user_for_update
-from logs_dialog import LogsDialog
 
-# --- إعدادات البريد (كما في السابق) ---
-try:
-    from PyPDF2 import PdfReader
-except ImportError:
-    PdfReader = None
-
+# تحميل بيانات البريد من .env
 load_dotenv()
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
@@ -38,7 +32,8 @@ TO_EMAIL = SMTP_USER
 def send_email(subject, body, to_email=TO_EMAIL):
     if not SMTP_USER or not SMTP_PASSWORD:
         logging.error("بيانات البريد ناقصة أو غير معرفة.")
-        raise Exception("إعدادات البريد الإلكتروني غير مكتملة!")
+        QMessageBox.critical(None, "خطأ", "إعدادات البريد الإلكتروني غير مكتملة!")
+        return
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = subject
     msg["From"] = SMTP_USER
@@ -50,7 +45,6 @@ def send_email(subject, body, to_email=TO_EMAIL):
             server.send_message(msg)
     except Exception as e:
         logging.error(f"فشل في إرسال الإيميل: {e}")
-        raise
 
 def is_easyocr_enabled():
     try:
@@ -74,42 +68,16 @@ class EasyOCRSingleton:
             cls._langs = langs
         return cls._instance
 
-# ========== تحسين الصورة مع تصحيح الميل (Deskew) ==========
 def preprocess_image_advanced(pil_img):
     try:
         img_gray = pil_img.convert('L')
-        img_np = np.array(img_gray)
-
-        # فلترة بسيطة لتقليل الضوضاء
-        img_blur = cv2.GaussianBlur(img_np, (5, 5), 0)
-
-        # تحويل الصورة إلى أبيض وأسود
-        _, img_bin = cv2.threshold(img_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        # العثور على الزوايا البيضاء (نص أسود على خلفية بيضاء)
-        coords = np.column_stack(np.where(img_bin > 0))
-        angle = 0
-        if coords.shape[0] > 0:
-            rect = cv2.minAreaRect(coords)
-            angle = rect[-1]
-            if angle < -45:
-                angle = -(90 + angle)
-            else:
-                angle = -angle
-
-            # تدوير الصورة لتصحيح الميل
-            (h, w) = img_bin.shape[:2]
-            M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
-            img_deskewed = cv2.warpAffine(img_bin, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-        else:
-            img_deskewed = img_bin
-
-        # تحسين التباين
-        img_enhanced = cv2.equalizeHist(img_deskewed)
-        # إزالة الضوضاء
-        img_denoised = cv2.fastNlMeansDenoising(img_enhanced, None, 20, 7, 21)
-
-        return Image.fromarray(img_denoised)
+        img_enhanced = ImageEnhance.Contrast(img_gray).enhance(2.5)
+        img_bright = ImageEnhance.Brightness(img_enhanced).enhance(1.15)
+        img_sharp = ImageEnhance.Sharpness(img_bright).enhance(2.0)
+        img_np = np.array(img_sharp)
+        img_denoised = cv2.fastNlMeansDenoising(img_np, None, 24, 7, 21)
+        _, img_bw = cv2.threshold(img_denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return Image.fromarray(img_bw)
     except Exception as ex:
         logging.error(f"preprocess_image_advanced error: {ex}")
         return pil_img
@@ -129,10 +97,6 @@ def open_multi_page_image(file_path):
         logging.error(f"خطأ في فتح TIFF: {e}")
         images = []
     return images
-
-def is_file_too_large(file_path, size_limit_mb=30):
-    size_mb = os.path.getsize(file_path) / (1024*1024)
-    return size_mb > size_limit_mb
 
 class OCRWorker(QThread):
     progress = pyqtSignal(int, int)
@@ -168,132 +132,66 @@ class OCRWorker(QThread):
                     self.error.emit(f"خطأ في تهيئة EasyOCR: {ex}")
                     return
             custom_config = r'--oem 3 --psm 6'
-            # معالجة PDF صفحة صفحة
-            if self.file_path.lower().endswith('.pdf') and PdfReader is not None:
+            if self.file_path.lower().endswith('.pdf'):
                 try:
-                    pdf_reader = PdfReader(open(self.file_path, "rb"))
-                    total_pages = len(pdf_reader.pages)
-                    for idx in range(total_pages):
-                        if self._cancelled:
-                            self.error.emit("تم إلغاء المعالجة من قبل المستخدم.")
-                            return
-                        try:
-                            images = convert_from_path(self.file_path, first_page=idx+1, last_page=idx+1, dpi=150)
-                            im = images[0]
-                        except Exception as ex:
-                            self.error.emit(f"خطأ في تحويل صفحة PDF: {ex}")
-                            return
-                        im_proc = im
-                        if self.rotation:
-                            im_proc = im_proc.rotate(-self.rotation, expand=True)
-                        if self.roi_rel:
-                            w, h = im_proc.size
-                            x_rel, y_rel, w_rel, h_rel = self.roi_rel
-                            left = int(x_rel * w)
-                            top = int(y_rel * h)
-                            right = left + int(w_rel * w)
-                            bottom = top + int(h_rel * h)
-                            im_proc = im_proc.crop((left, top, right, bottom))
-                        if self.enhance:
-                            im_proc = preprocess_image_advanced(im_proc)
-                        try:
-                            if self.engine in ["Tesseract", "كلاهما"]:
-                                import pytesseract
-                                text_tess = pytesseract.image_to_string(im_proc, lang=self.lang, config=custom_config)
-                                result_texts.append((f"Tesseract صفحة {idx+1}", text_tess.strip()))
-                            if self.engine in ["EasyOCR", "كلاهما"] and reader:
-                                img_np = np.array(im_proc)
-                                result = reader.readtext(img_np, detail=0, paragraph=True)
-                                text_easy = "\n".join(result).strip()
-                                result_texts.append((f"EasyOCR صفحة {idx+1}", text_easy))
-                        except MemoryError:
-                            self.error.emit("نفدت ذاكرة النظام أثناء المعالجة. حاول تقليل حجم الملف أو الصفحات.")
-                            return
-                        except Exception as ex:
-                            self.error.emit(f"خطأ أثناء معالجة الصفحة: {ex}")
-                            return
-                        self.progress.emit(idx + 1, total_pages)
+                    images = convert_from_path(self.file_path, dpi=150)
                 except Exception as ex:
-                    self.error.emit(f"خطأ في قراءة PDF: {ex}")
+                    self.error.emit(f"خطأ في تحويل PDF إلى صور: {ex}")
                     return
             elif self.file_path.lower().endswith(('.tiff', '.tif')):
                 images = open_multi_page_image(self.file_path)
-                total_pages = len(images)
                 if not images:
                     self.error.emit("خطأ في فتح ملف TIFF متعدد الصفحات.")
                     return
-                for idx, im in enumerate(images):
-                    if self._cancelled:
-                        self.error.emit("تم إلغاء المعالجة من قبل المستخدم.")
-                        return
-                    im_proc = im
-                    if self.rotation:
-                        im_proc = im_proc.rotate(-self.rotation, expand=True)
-                    if self.roi_rel:
-                        w, h = im_proc.size
-                        x_rel, y_rel, w_rel, h_rel = self.roi_rel
-                        left = int(x_rel * w)
-                        top = int(y_rel * h)
-                        right = left + int(w_rel * w)
-                        bottom = top + int(h_rel * h)
-                        im_proc = im_proc.crop((left, top, right, bottom))
-                    if self.enhance:
-                        im_proc = preprocess_image_advanced(im_proc)
-                    try:
-                        if self.engine in ["Tesseract", "كلاهما"]:
-                            import pytesseract
-                            text_tess = pytesseract.image_to_string(im_proc, lang=self.lang, config=custom_config)
-                            result_texts.append((f"Tesseract صفحة {idx+1}", text_tess.strip()))
-                        if self.engine in ["EasyOCR", "كلاهما"] and reader:
-                            img_np = np.array(im_proc)
-                            result = reader.readtext(img_np, detail=0, paragraph=True)
-                            text_easy = "\n".join(result).strip()
-                            result_texts.append((f"EasyOCR صفحة {idx+1}", text_easy))
-                    except MemoryError:
-                        self.error.emit("نفدت ذاكرة النظام أثناء المعالجة. حاول تقليل حجم الملف أو الصفحات.")
-                        return
-                    except Exception as ex:
-                        self.error.emit(f"خطأ أثناء معالجة الصفحة: {ex}")
-                        return
-                    self.progress.emit(idx + 1, total_pages)
             else:
-                # صورة واحدة فقط
-                total_pages = 1
-                try:
-                    im = Image.open(self.file_path)
-                except Exception as ex:
-                    self.error.emit(f"خطأ في فتح الصورة: {ex}")
+                images = [self.file_path]
+            total_pages = len(images)
+            if total_pages > 20:
+                self.error.emit("تنبيه: الملف يحتوي على صفحات كثيرة. قد يسبب بطء أو استهلاك ذاكرة.")
+            for idx, img in enumerate(images):
+                if self._cancelled:
+                    self.error.emit("تم إلغاء المعالجة من قبل المستخدم.")
                     return
-                im_proc = im
+                if isinstance(img, str):
+                    try:
+                        im = Image.open(img)
+                    except Exception as ex:
+                        self.error.emit(f"خطأ في فتح الصورة: {ex}")
+                        return
+                else:
+                    im = img
                 if self.rotation:
-                    im_proc = im_proc.rotate(-self.rotation, expand=True)
+                    im = im.rotate(-self.rotation, expand=True)
                 if self.roi_rel:
-                    w, h = im_proc.size
+                    w, h = im.size
                     x_rel, y_rel, w_rel, h_rel = self.roi_rel
                     left = int(x_rel * w)
                     top = int(y_rel * h)
                     right = left + int(w_rel * w)
                     bottom = top + int(h_rel * h)
-                    im_proc = im_proc.crop((left, top, right, bottom))
+                    im = im.crop((left, top, right, bottom))
                 if self.enhance:
-                    im_proc = preprocess_image_advanced(im_proc)
+                    im_proc = preprocess_image_advanced(im)
+                else:
+                    im_proc = im
                 try:
                     if self.engine in ["Tesseract", "كلاهما"]:
                         import pytesseract
                         text_tess = pytesseract.image_to_string(im_proc, lang=self.lang, config=custom_config)
-                        result_texts.append((f"Tesseract صفحة 1", text_tess.strip()))
+                        result_texts.append((f"Tesseract صفحة {idx+1}", text_tess.strip()))
                     if self.engine in ["EasyOCR", "كلاهما"] and reader:
                         img_np = np.array(im_proc)
                         result = reader.readtext(img_np, detail=0, paragraph=True)
                         text_easy = "\n".join(result).strip()
-                        result_texts.append((f"EasyOCR صفحة 1", text_easy))
+                        result_texts.append((f"EasyOCR صفحة {idx+1}", text_easy))
                 except MemoryError:
                     self.error.emit("نفدت ذاكرة النظام أثناء المعالجة. حاول تقليل حجم الملف أو الصفحات.")
                     return
                 except Exception as ex:
-                    self.error.emit(f"خطأ أثناء معالجة الصورة: {ex}")
+                    self.error.emit(f"خطأ أثناء معالجة الصفحة: {ex}")
                     return
-                self.progress.emit(1, 1)
+                self.progress.emit(idx + 1, total_pages)
+                del im
             text_parts = []
             for name, text in result_texts:
                 text_parts.append(f"--- {name} ---\n{text}")
@@ -325,21 +223,10 @@ class OCRMainWindow(QMainWindow):
         self.backup_manager.start_auto_backups()
         self.init_ui()
         self.init_backup_ui()
-        self.init_logs_ui()
         self.notify_update_if_available()
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self.send_periodic_status)
         self.status_timer.start(60 * 60 * 1000)
-
-    def init_logs_ui(self):
-        logs_menu = self.menuBar().addMenu("سجل الأحداث")
-        open_logs_action = QAction("عرض السجل", self)
-        open_logs_action.triggered.connect(self.open_logs_dialog)
-        logs_menu.addAction(open_logs_action)
-
-    def open_logs_dialog(self):
-        dlg = LogsDialog()
-        dlg.exec_()
 
     def notify_update_if_available(self):
         current_version = "1.1.0"
@@ -356,98 +243,58 @@ class OCRMainWindow(QMainWindow):
     def init_ui(self):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        # تخطيط رئيسي عمودي
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(8, 8, 8, 8)
-        main_layout.setSpacing(6)
-
-        # ======= الرسالة التوعوية بالأعلى =======
-        self.info_label = QLabel(
-            "📸 يرجى رفع صورة واضحة، مسطحة، بدون ميل أو ظلال.\n"
-            "للحصول على أفضل نتيجة، ضع الورقة على سطح مستوٍ وصوّر من الأعلى مباشرة."
-        )
-        self.info_label.setWordWrap(True)
-        self.info_label.setStyleSheet(
-            "background:#fff8dc; color:#603c00; border:1px solid #ffe082; padding:10px; border-radius:6px; font-size:13px; margin-bottom:8px;"
-        )
-        main_layout.addWidget(self.info_label)
-
-        # ======= بقية الواجهة في تخطيط أفقي =======
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(12)
-
-        # ==== العمود الأيسر ====
+        main_layout = QHBoxLayout()
         left_col = QVBoxLayout()
-        left_col.setSpacing(7)
-
+        right_col = QVBoxLayout()
         self.import_btn = QPushButton("استيراد صورة أو PDF")
         self.import_btn.clicked.connect(self.import_file)
         left_col.addWidget(self.import_btn)
-
         self.rotate_btn = QPushButton("تدوير")
         self.rotate_btn.clicked.connect(self.rotate_image)
         left_col.addWidget(self.rotate_btn)
-
         self.preview_label = QLabel("معاينة")
         self.preview_label.setFixedSize(180, 180)
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("background:#fafafa; border:1px solid #e0e0e0;")
         left_col.addWidget(self.preview_label)
-
-        left_col.addWidget(QLabel("محرك التعرف:"))
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(["Tesseract", "EasyOCR", "كلاهما"])
+        left_col.addWidget(QLabel("محرك التعرف:"))
         left_col.addWidget(self.engine_combo)
-
-        left_col.addWidget(QLabel("اللغة:"))
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["ara+eng", "ara", "eng"])
+        left_col.addWidget(QLabel("اللغة:"))
         left_col.addWidget(self.lang_combo)
-
-        self.enhance_checkbox = QCheckBox("تفعيل تحسين الصورة (تصحيح الميل والتباين)")
-        self.enhance_checkbox.setChecked(True)
+        self.enhance_checkbox = QCheckBox("تفعيل تحسين الصورة (للنص المشوش)")
+        self.enhance_checkbox.setChecked(False)
         left_col.addWidget(self.enhance_checkbox)
-
         self.process_btn = QPushButton("ابدأ المعالجة")
         self.process_btn.clicked.connect(self.start_ocr)
         self.process_btn.setEnabled(False)
         left_col.addWidget(self.process_btn)
-
         self.save_btn = QPushButton("حفظ النص")
         self.save_btn.clicked.connect(self.save_text)
         self.save_btn.setEnabled(False)
         left_col.addWidget(self.save_btn)
-
         self.cancel_btn = QPushButton("إلغاء")
         self.cancel_btn.clicked.connect(self.cancel_ocr)
         self.cancel_btn.setEnabled(False)
         left_col.addWidget(self.cancel_btn)
-
         self.report_btn = QPushButton("إبلاغ عن مشكلة")
         self.report_btn.clicked.connect(self.report_issue)
         left_col.addWidget(self.report_btn)
-
         self.update_btn = QPushButton("🔄 تحديث التطبيق")
         self.update_btn.clicked.connect(self.check_for_updates)
         left_col.addWidget(self.update_btn)
         left_col.addStretch()
-        content_layout.addLayout(left_col, 0)
-
-        # ==== العمود الأيمن ====
-        right_col = QVBoxLayout()
-        right_col.setSpacing(7)
+        main_layout.addLayout(left_col)
         right_col.addWidget(QLabel("النص المستخرج:"))
-
         self.result_edit = QTextEdit()
         self.result_edit.setReadOnly(True)
         right_col.addWidget(self.result_edit)
-
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
         right_col.addWidget(self.progress_bar)
-
-        content_layout.addLayout(right_col, 1)
-        main_layout.addLayout(content_layout)
+        main_layout.addLayout(right_col)
         self.central_widget.setLayout(main_layout)
 
     def init_backup_ui(self):
@@ -513,20 +360,9 @@ class OCRMainWindow(QMainWindow):
             "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff *.tif);;PDF Files (*.pdf)"
         )
         if file_path:
-            # فحص حجم الملف قبل المتابعة
-            if is_file_too_large(file_path):
-                QMessageBox.warning(self, "ملف كبير", "الملف أكبر من الحجم المسموح (30MB)، قد يؤدي ذلك إلى بطء أو توقف التطبيق.")
-                return
             self.file_path = file_path
             self.current_image_rotation = 0
-            # مؤشر انتظار أثناء تجهيز المعاينة
-            QApplication.setOverrideCursor(Qt.WaitCursor)
-            self.preview_label.setText("جاري تجهيز المعاينة...")
-            QApplication.processEvents()
-            try:
-                self.show_preview(file_path)
-            finally:
-                QApplication.restoreOverrideCursor()
+            self.show_preview(file_path)
             self.process_btn.setEnabled(True)
             self.save_btn.setEnabled(False)
             self.result_edit.setPlainText("")
@@ -537,17 +373,10 @@ class OCRMainWindow(QMainWindow):
             self.show_preview(self.file_path)
 
     def show_preview(self, file_path):
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        self.preview_label.setText("جاري تجهيز المعاينة...")
-        QApplication.processEvents()
         try:
             if file_path.lower().endswith('.pdf'):
-                try:
-                    images = convert_from_path(file_path, first_page=1, last_page=1, dpi=100)
-                    img = images[0]
-                except Exception as ex:
-                    self.preview_label.setText("تعذر فتح أول صفحة من ملف PDF!\n" + str(ex))
-                    return
+                images = convert_from_path(file_path, first_page=1, last_page=1, dpi=100)
+                img = images[0]
             elif file_path.lower().endswith(('.tiff', '.tif')):
                 images = open_multi_page_image(file_path)
                 img = images[0] if images else None
@@ -564,30 +393,15 @@ class OCRMainWindow(QMainWindow):
             else:
                 self.preview_label.setText("خطأ في المعاينة!")
         except Exception as e:
-            self.preview_label.setText("خطأ: الملف غير مدعوم أو معطوب!\n" + str(e))
-        finally:
-            QApplication.restoreOverrideCursor()
+            self.preview_label.setText("خطأ في المعاينة!")
 
     def start_ocr(self):
         self.progress_bar.setValue(0)
-        self.progress_bar.setRange(0, 100)
         self.result_edit.setPlainText("")
         self.process_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
         self.ocr_start_time = time.time()
-        # معرفة عدد الصفحات مقدماً إذا PDF
-        pages_count = 1
-        if self.file_path.lower().endswith('.pdf') and PdfReader is not None:
-            try:
-                pdf_reader = PdfReader(open(self.file_path, "rb"))
-                pages_count = len(pdf_reader.pages)
-            except Exception:
-                pages_count = 1
-        self.progress_bar.setRange(0, 100)
-        if pages_count == 1:
-            # صورة واحدة أو PDF صفحة واحدة: شريط غير محدد
-            self.progress_bar.setRange(0, 0)
         self.ocr_thread = OCRWorker(
             self.file_path,
             self.engine_combo.currentText(),
@@ -602,20 +416,11 @@ class OCRMainWindow(QMainWindow):
         self.ocr_thread.start()
 
     def update_progress(self, current, total):
-        if total > 1:
-            percent = int((current / total) * 100)
-            self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(percent)
-        else:
-            # صورة واحدة: حول الشريط لمحدد عند الانتهاء
-            self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(100)
-        QApplication.processEvents()  # يجبر التحديث الفوري للواجهة
+        percent = int((current / total) * 100)
+        self.progress_bar.setValue(percent)
 
     def ocr_finished(self, text):
         elapsed = time.time() - self.ocr_start_time if hasattr(self, 'ocr_start_time') else None
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(100)
         if elapsed:
             text += f"\n\n--------------------\nالمدة: {elapsed:.2f} ثانية"
         self.result_edit.setPlainText(text)
@@ -626,20 +431,14 @@ class OCRMainWindow(QMainWindow):
             QMessageBox.information(self, "وقت المعالجة", f"تمت معالجة الملف في {elapsed:.2f} ثانية")
 
     def handle_error(self, error_msg):
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
         self.result_edit.setPlainText("حدث خطأ أثناء استخراج النص:\n" + error_msg)
         self.process_btn.setEnabled(True)
         self.save_btn.setEnabled(False)
         self.cancel_btn.setEnabled(False)
-        try:
-            if self.settings.get("send_crash_reports", False):
-                send_email(
-                    "OCR App Error",
-                    f"تم رصد خطأ في التطبيق:\n{error_msg}"
-                )
-        except Exception:
-            pass
+        send_email(
+            "OCR App Error",
+            f"تم رصد خطأ في التطبيق:\n{error_msg}"
+        )
 
     def cancel_ocr(self):
         if self.ocr_thread is not None:
@@ -673,13 +472,10 @@ class OCRMainWindow(QMainWindow):
                     f.write(issue.strip() + "\n" + "-"*60 + "\n")
             except Exception:
                 pass
-            try:
-                send_email(
-                    "OCR App - بلاغ عن مشكلة",
-                    f"تم الإبلاغ عن مشكلة جديدة:\n\n{issue.strip()}"
-                )
-            except Exception:
-                pass
+            send_email(
+                "OCR App - بلاغ عن مشكلة",
+                f"تم الإبلاغ عن مشكلة جديدة:\n\n{issue.strip()}"
+            )
             QMessageBox.information(self, "شكرًا", "تم إرسال البلاغ بنجاح.\nشكرًا لمساهمتك!")
 
     def check_for_updates(self):
@@ -707,22 +503,19 @@ class OCRMainWindow(QMainWindow):
         self.update_applier.start()
         self.progress_dialog.exec_()
 
-    def finish_update(self, success, msg=""):
+
+    def finish_update(self, success):
         self.progress_dialog.close()
         if success:
-            QMessageBox.information(self, "تم التحميل", "تم تحميل التحديث بنجاح في الملف: update_temp.zip\nتم أخذ نسخة احتياطية تلقائية.\nيرجى فك الضغط واستبدال الملفات يدوياً. إذا حدث أي خطأ يمكنك الاستعادة من النسخة الاحتياطية.")
+            QMessageBox.information(self, "تم التحميل", "تم تحميل التحديث بنجاح في الملف: update_temp.zip\nيرجى فك الضغط واستبدال الملفات يدوياً.")
         else:
-            QMessageBox.critical(self, "خطأ", f"فشل تحميل التحديث.\n{msg}\nيرجى المحاولة لاحقاً.")
+            QMessageBox.critical(self, "خطأ", "فشل تحميل التحديث.\nيرجى المحاولة لاحقاً.")
 
     def send_periodic_status(self):
-        if self.settings.get("send_crash_reports", False):
-            try:
-                send_email(
-                    "OCR App - تقرير حالة تلقائي",
-                    "التطبيق يعمل بشكل طبيعي.\n(تقرير تلقائي كل ساعة.)"
-                )
-            except Exception:
-                pass
+        send_email(
+            "OCR App - تقرير حالة تلقائي",
+            "التطبيق يعمل بشكل طبيعي.\n(تقرير تلقائي كل ساعة.)"
+        )
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -732,18 +525,11 @@ class OCRMainWindow(QMainWindow):
         urls = event.mimeData().urls()
         if urls:
             file_path = urls[0].toLocalFile()
-            if is_file_too_large(file_path):
-                QMessageBox.warning(self, "ملف كبير", "الملف أكبر من الحجم المسموح (30MB)، قد يؤدي ذلك إلى بطء أو توقف التطبيق.")
-                return
             self.file_path = file_path
             self.current_image_rotation = 0
-            QApplication.setOverrideCursor(Qt.WaitCursor)
-            self.preview_label.setText("جاري تجهيز المعاينة...")
-            QApplication.processEvents()
-            try:
-                self.show_preview(file_path)
-            finally:
-                QApplication.restoreOverrideCursor()
+            self.show_preview(file_path)
             self.process_btn.setEnabled(True)
             self.save_btn.setEnabled(False)
             self.result_edit.setPlainText("")
+
+# نهاية الملف
