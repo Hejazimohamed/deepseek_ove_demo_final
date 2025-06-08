@@ -36,9 +36,11 @@ class UpdateZipper(QWidget):
 
     def add_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "اختر الملفات", "", "All Files (*)")
+        existing = {self.file_list.item(i).text() for i in range(self.file_list.count())}
         for f in files:
-            if f not in [self.file_list.item(i).text() for i in range(self.file_list.count())]:
+            if f not in existing:
                 self.file_list.addItem(f)
+                existing.add(f)
 
     def clear_files(self):
         self.file_list.clear()
@@ -49,14 +51,17 @@ class UpdateZipper(QWidget):
             return
 
         zip_path = os.path.join(os.getcwd(), "update_temp.zip")
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for i in range(self.file_list.count()):
-                file_path = self.file_list.item(i).text()
-                arcname = os.path.basename(file_path)
-                zipf.write(file_path, arcname)
-
-        QMessageBox.information(self, "تم", f"تم إنشاء الملف:\n{zip_path}")
-
+        try:
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for i in range(self.file_list.count()):
+                    file_path = self.file_list.item(i).text()
+                    if not os.path.isfile(file_path):
+                        raise FileNotFoundError(f"الملف غير موجود: {file_path}")
+                    arcname = os.path.basename(file_path)
+                    zipf.write(file_path, arcname)
+            QMessageBox.information(self, "تم", f"تم إنشاء الملف:\n{zip_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل إنشاء ملف التحديث: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
