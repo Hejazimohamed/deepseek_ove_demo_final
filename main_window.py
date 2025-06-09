@@ -23,7 +23,7 @@ import cv2
 
 from backup_manager import BackupManager
 from settings_manager import SettingsManager
-from updater import UpdateChecker, UpdateApplier, prompt_user_for_update
+from updater import UpdateChecker, UpdateApplier
 
 # —— تحميل متغيرات البيئة للبريد —— #
 load_dotenv()

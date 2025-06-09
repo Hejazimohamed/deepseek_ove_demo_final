@@ -1,4 +1,3 @@
-import pytest
 from PIL import Image
 from main_window import preprocess_image_advanced
 

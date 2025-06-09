@@ -22,7 +22,7 @@ def show_critical_message(title, msg):
     try:
         if not is_headless():
             from PyQt5.QtWidgets import QApplication, QMessageBox
-            app = QApplication.instance() or QApplication(sys.argv)
+            QApplication.instance() or QApplication(sys.argv)
             QMessageBox.critical(None, title, msg)
         else:
             print(f"=== {title} ===\n{msg}")
@@ -49,7 +49,6 @@ def check_environment():
 
     # إصدار PyQt5
     try:
-        import PyQt5
         from PyQt5.QtCore import QT_VERSION_STR
         if tuple(map(int, QT_VERSION_STR.split('.'))) < (5, 12):
             show_critical_message(

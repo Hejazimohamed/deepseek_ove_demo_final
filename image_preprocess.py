@@ -1,4 +1,3 @@
-import cv2
 
 
 def enhance_image(path):

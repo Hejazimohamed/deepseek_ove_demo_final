@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 import smtplib
 import time
@@ -18,17 +17,14 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QProgressBar,
     QMessageBox,
-    QLineEdit,
     QInputDialog,
     QCheckBox,
-    QSizePolicy,
     QProgressDialog,
     QAction,
-    QMenuBar,
     QDialog,
     QListWidget,
     QListWidgetItem)
-from PyQt5.QtGui import QPixmap, QImage, QFont, QIcon
+from PyQt5.QtGui import QPixmap, QImage, QIcon
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PIL import Image, ImageEnhance, UnidentifiedImageError
 from pdf2image import convert_from_path

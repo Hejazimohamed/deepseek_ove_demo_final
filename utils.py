@@ -20,7 +20,7 @@ def check_dependencies():
             missing.append(pkg)
     # تحقق خاص من poppler-utils لنظام PDF
     try:
-        from pdf2image import convert_from_path
+        pass
     except Exception:
         missing.append('poppler-utils (system package)')
     return missing
