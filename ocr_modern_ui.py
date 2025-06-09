@@ -1,18 +1,10 @@
 ﻿import sys
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QComboBox, QCheckBox,
-    QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QFileDialog, QSizePolicy, QMessageBox
+    QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QFileDialog, QSizePolicy
 )
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtCore import Qt
-
-# استيراد دالة OCR من المشروع الأصلي
-try:
-    # إذا كان ocr.py في جذر المشروع
-    from images_fpr_test.ocr_parallel_ui import 
-except ImportError:
-    # إذا كان ocr.py في مجلد فرعي مثل images_fpr_test
-    from images_fpr_test.ocr import extract_text_from_image
 
 button_style = """
 QPushButton {
@@ -81,15 +73,11 @@ class OCRApp(QWidget):
         super().__init__()
         self.resize(840, 530)
         self.setMinimumSize(520, 340)
-        self.setWindowTitle("Golden OCR لاستخراج الكتابة العربية والإنجليزية")
+        self.setWindowTitle("الذكي OCR (عربي / إنجليزي)")
         self.setStyleSheet("font-family: Tahoma, Arial; font-size: 13px;")
         self.init_ui()
-        self.loaded_image_path = None
 
     def init_ui(self):
-        root_vbox = QVBoxLayout(self)
-        root_vbox.setSpacing(5)
-
         toolbar = QHBoxLayout()
         toolbar.setSpacing(0)
         toolbar.setContentsMargins(10, 12, 10, 2)
@@ -99,17 +87,14 @@ class OCRApp(QWidget):
         self.import_btn.clicked.connect(self.import_image)
         self.rotate_btn = QPushButton("تدوير الصورة")
         self.rotate_btn.setStyleSheet(button_style)
-        self.rotate_btn.clicked.connect(self.rotate_image)
 
         self.start_btn = QPushButton("إبدأ المعالجة")
         self.start_btn.setStyleSheet(button_style)
-        self.start_btn.clicked.connect(self.start_processing)
         self.save_btn = QPushButton("حفظ النص")
         self.save_btn.setStyleSheet(button_style)
-        self.save_btn.clicked.connect(self.save_text)
 
         self.engine_combo = QComboBox()
-        self.engine_combo.addItems(["Tesseract", "EasyOCR", "كلاهما"])
+        self.engine_combo.addItems(["Tesseract"])
         self.engine_combo.setStyleSheet("font-size: 12px; min-width: 72px; max-width: 110px;")
         self.engine_combo.setMinimumWidth(72)
         self.engine_combo.setMaximumWidth(110)
@@ -153,6 +138,8 @@ class OCRApp(QWidget):
         )
         tips_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
+        root_vbox = QVBoxLayout(self)
+        root_vbox.setSpacing(5)
         root_vbox.addLayout(toolbar)
         root_vbox.addWidget(tips_label)
 
@@ -180,7 +167,8 @@ class OCRApp(QWidget):
         self.progress_bar_preview.setTextVisible(True)
         self.progress_bar_preview.setFixedHeight(32)
         self.progress_bar_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.progress_bar_preview.setFormat("%p%")
+        self.progress_bar_preview.setFormat("%p%")  # سيظهر فقط النسبة (مثلاً "0%")
+        # هنا: محاذاة النسبة لليسار مع padding مناسب + لون رصاصي خافت
         self.progress_bar_preview.setStyleSheet("""
             QProgressBar {
                 font-size: 16px;
@@ -222,12 +210,10 @@ class OCRApp(QWidget):
 
         report_btn = QPushButton("إبلاغ عن مشكلة")
         report_btn.setStyleSheet(report_btn_style)
-        report_btn.clicked.connect(self.report_issue)
         sidebar_vbox.addWidget(report_btn)
 
         update_btn = QPushButton("تحديث التطبيق")
         update_btn.setStyleSheet(update_btn_style)
-        # يمكنك ربطه مع دالة update لاحقاً
         sidebar_vbox.addWidget(update_btn)
 
         sidebar_vbox.addSpacing(5)
@@ -272,48 +258,10 @@ class OCRApp(QWidget):
                     Qt.KeepAspectRatio, Qt.SmoothTransformation
                 )
                 self.image_preview.setPixmap(scaled)
-                self.loaded_image_path = file_name
             else:
                 self.image_preview.setText("تعذر تحميل الصورة")
-                self.loaded_image_path = None
         else:
             self.image_preview.setText("لم يتم تحميل صورة بعد")
-            self.loaded_image_path = None
-
-    def rotate_image(self):
-        # مبدئيا: دالة شكلية - يمكنك إضافة تدوير فعلي إذا رغبت
-        QMessageBox.information(self, "تدوير الصورة", "ميزة التدوير قيد التطوير حالياً.")
-
-    def start_processing(self):
-        if not self.loaded_image_path:
-            QMessageBox.warning(self, "تنبيه", "الرجاء استيراد صورة أولاً.")
-            return
-        self.progress_bar_preview.setValue(10)
-        try:
-            # استخدم دالة استخراج النص من مشروعك
-            text = extract_text_from_image(self.loaded_image_path)
-            self.progress_bar_preview.setValue(100)
-            self.output_box.setText(text)
-        except Exception as e:
-            self.progress_bar_preview.setValue(0)
-            QMessageBox.critical(self, "خطأ", f"حدث خطأ أثناء استخراج النص:\n{e}")
-
-    def save_text(self):
-        text = self.output_box.toPlainText()
-        if not text.strip():
-            QMessageBox.warning(self, "تحذير", "لا يوجد نص للحفظ.")
-            return
-        filename, _ = QFileDialog.getSaveFileName(self, "حفظ النص", "", "Text Files (*.txt);;All Files (*)")
-        if filename:
-            try:
-                with open(filename, "w", encoding="utf-8") as f:
-                    f.write(text)
-                QMessageBox.information(self, "تم الحفظ", "تم حفظ النص بنجاح.")
-            except Exception as e:
-                QMessageBox.critical(self, "خطأ", f"لم يتم حفظ النص:\n{e}")
-
-    def report_issue(self):
-        QMessageBox.information(self, "إبلاغ", "لإبلاغ عن مشكلة، يرجى مراسلتي عبر البريد أو الواتساب في أسفل القائمة.")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

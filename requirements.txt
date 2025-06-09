@@ -9,3 +9,7 @@ PyQt5-sip==12.17.0
 python-dotenv==1.1.0
 python-gnupg==0.5.4
 requests==2.32.3
+pytesseract
+easyocr
+pytest>=7.0
+pytest-qt>=4.0
