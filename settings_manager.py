@@ -1,4 +1,5 @@
-﻿import json
+import json
+
 
 class SettingsManager:
     def __init__(self, file_path='settings.json'):

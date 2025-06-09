@@ -1,5 +1,11 @@
-﻿# tests/conftest.py
-import sys, os
+# tests/conftest.py
+import sys
+import os
 
 # أدخل المسار الأب (جذر المشروع) إلى sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(
+    0,
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            '..')))

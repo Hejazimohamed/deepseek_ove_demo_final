@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import logging
 import smtplib
@@ -27,11 +27,12 @@ from updater import UpdateChecker, UpdateApplier, prompt_user_for_update
 
 # —— تحميل متغيرات البيئة للبريد —— #
 load_dotenv()
-SMTP_USER     = os.getenv("SMTP_USER")
+SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-SMTP_SERVER   = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT     = int(os.getenv("SMTP_PORT", 587))
-TO_EMAIL      = os.getenv("TO_EMAIL", SMTP_USER)
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+TO_EMAIL = os.getenv("TO_EMAIL", SMTP_USER)
+
 
 def send_email(subject, body, to_email=TO_EMAIL):
     """إرسال بريد تنبيهي؛ إذا كانت الإعدادات ناقصة، نسجل فقط تحذيراً."""
@@ -40,8 +41,8 @@ def send_email(subject, body, to_email=TO_EMAIL):
         return
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = subject
-    msg["From"]    = SMTP_USER
-    msg["To"]      = to_email
+    msg["From"] = SMTP_USER
+    msg["To"] = to_email
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
@@ -49,6 +50,7 @@ def send_email(subject, body, to_email=TO_EMAIL):
             server.send_message(msg)
     except Exception as e:
         logging.error(f"Failed to send email: {e}")
+
 
 def is_easyocr_enabled():
     """قراءة config.txt لاختبار تمكين EasyOCR."""
@@ -60,6 +62,7 @@ def is_easyocr_enabled():
     except Exception:
         return False
     return False
+
 
 class EasyOCRSingleton:
     _instance = None
@@ -73,20 +76,23 @@ class EasyOCRSingleton:
             cls._langs = langs
         return cls._instance
 
+
 def preprocess_image_advanced(pil_img):
     """تحسين الصورة ثم تحويلها إلى ثنائي (B/W)."""
     try:
         img_gray = pil_img.convert('L')
-        img_enh  = ImageEnhance.Contrast(img_gray).enhance(2.5)
-        img_b    = ImageEnhance.Brightness(img_enh).enhance(1.15)
-        img_s    = ImageEnhance.Sharpness(img_b).enhance(2.0)
-        arr      = np.array(img_s)
-        denoise  = cv2.fastNlMeansDenoising(arr, None, 24,7,21)
-        _, bw    = cv2.threshold(denoise, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        img_enh = ImageEnhance.Contrast(img_gray).enhance(2.5)
+        img_b = ImageEnhance.Brightness(img_enh).enhance(1.15)
+        img_s = ImageEnhance.Sharpness(img_b).enhance(2.0)
+        arr = np.array(img_s)
+        denoise = cv2.fastNlMeansDenoising(arr, None, 24, 7, 21)
+        _, bw = cv2.threshold(
+            denoise, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         return Image.fromarray(bw)
     except Exception as ex:
         logging.error(f"preprocess_image_advanced error: {ex}")
         return pil_img
+
 
 def open_multi_page_image(path):
     """فتح ملف TIFF متعدد الصفحات."""
@@ -104,28 +110,39 @@ def open_multi_page_image(path):
         logging.error(f"TIFF open error: {e}")
     return pages
 
+
 class OCRWorker(QThread):
     progress = pyqtSignal(int, int)
-    result   = pyqtSignal(str)
-    error    = pyqtSignal(str)
+    result = pyqtSignal(str)
+    error = pyqtSignal(str)
 
-    def __init__(self, file_path, engine, lang, roi_rel=None, rotation=0, enhance=False):
+    def __init__(
+            self,
+            file_path,
+            engine,
+            lang,
+            roi_rel=None,
+            rotation=0,
+            enhance=False):
         super().__init__()
         self.file_path = file_path
-        self.engine    = engine
-        self.lang      = lang
-        self.roi_rel   = roi_rel
-        self.rotation  = rotation
-        self.enhance   = enhance
-        self._cancelled= False
+        self.engine = engine
+        self.lang = lang
+        self.roi_rel = roi_rel
+        self.rotation = rotation
+        self.enhance = enhance
+        self._cancelled = False
 
     def run(self):
         try:
             # إعداد اللغات
             langs = []
-            if "ara" in self.lang: langs.append("ar")
-            if "eng" in self.lang: langs.append("en")
-            if not langs: langs = ["en"]
+            if "ara" in self.lang:
+                langs.append("ar")
+            if "eng" in self.lang:
+                langs.append("en")
+            if not langs:
+                langs = ["en"]
 
             reader = None
             if self.engine in ["EasyOCR", "كلاهما"] and is_easyocr_enabled():
@@ -160,7 +177,8 @@ class OCRWorker(QThread):
                 if self.roi_rel:
                     w, h = im.size
                     x, y, wr, hr = self.roi_rel
-                    im = im.crop((int(x*w), int(y*h), int((x+wr)*w), int((y+hr)*h)))
+                    im = im.crop((int(x * w), int(y * h),
+                                  int((x + wr) * w), int((y + hr) * h)))
 
                 proc = preprocess_image_advanced(im) if self.enhance else im
 
@@ -169,7 +187,8 @@ class OCRWorker(QThread):
                     if self.engine in ["Tesseract", "كلاهما"]:
                         import pytesseract
                         cfg = "--oem 3 --psm 6"
-                        text_block += pytesseract.image_to_string(proc, lang=self.lang, config=cfg).strip()
+                        text_block += pytesseract.image_to_string(
+                            proc, lang=self.lang, config=cfg).strip()
                     if reader:
                         arr = np.array(proc)
                         txt = reader.readtext(arr, detail=0, paragraph=True)
@@ -191,6 +210,7 @@ class OCRWorker(QThread):
     def cancel(self):
         self._cancelled = True
 
+
 class OCRMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -201,13 +221,13 @@ class OCRMainWindow(QMainWindow):
         self.setMinimumSize(520, 340)
         self.setStyleSheet("font-family: Tahoma, Arial; font-size: 13px;")
 
-        self.file_path        = ""
-        self.roi_rel          = None
+        self.file_path = ""
+        self.roi_rel = None
         self.current_rotation = 0
-        self.ocr_start_time   = None
-        self.ocr_thread       = None
+        self.ocr_start_time = None
+        self.ocr_thread = None
 
-        self.settings       = SettingsManager()
+        self.settings = SettingsManager()
         self.backup_manager = BackupManager()
         self.backup_manager.start_auto_backups()
 
@@ -309,8 +329,9 @@ class OCRMainWindow(QMainWindow):
 
         # إعدادات المحرك واللغة
         self.engine_combo = QComboBox()
-        self.engine_combo.addItems(["Tesseract","EasyOCR","كلاهما"])
-        self.engine_combo.setStyleSheet("font-size: 12px; min-width: 72px; max-width: 110px;")
+        self.engine_combo.addItems(["Tesseract", "EasyOCR", "كلاهما"])
+        self.engine_combo.setStyleSheet(
+            "font-size: 12px; min-width: 72px; max-width: 110px;")
         self.engine_combo.setMinimumWidth(72)
         self.engine_combo.setMaximumWidth(110)
         toolbar.addWidget(self.engine_combo)
@@ -318,8 +339,9 @@ class OCRMainWindow(QMainWindow):
         toolbar.addSpacing(36)
 
         self.lang_combo = QComboBox()
-        self.lang_combo.addItems(["ara+eng","ara","eng"])
-        self.lang_combo.setStyleSheet("font-size: 12px; min-width: 72px; max-width: 110px;")
+        self.lang_combo.addItems(["ara+eng", "ara", "eng"])
+        self.lang_combo.setStyleSheet(
+            "font-size: 12px; min-width: 72px; max-width: 110px;")
         self.lang_combo.setMinimumWidth(72)
         self.lang_combo.setMaximumWidth(110)
         toolbar.addWidget(self.lang_combo)
@@ -327,7 +349,8 @@ class OCRMainWindow(QMainWindow):
         toolbar.addSpacing(36)
 
         self.enhance_chk = QCheckBox()
-        self.enhance_chk.setToolTip("تفعيل تحسين الصورة (تصحيح الميل والتباين)")
+        self.enhance_chk.setToolTip(
+            "تفعيل تحسين الصورة (تصحيح الميل والتباين)")
         self.enhance_chk.setFixedWidth(22)
         toolbar.addWidget(self.enhance_chk)
 
@@ -377,7 +400,8 @@ class OCRMainWindow(QMainWindow):
             "border: 1px solid #CCC; background: #F9F9F9; min-width: 120px; min-height: 200px; font-size: 12px; color: #888; border-radius: 10px;"
         )
         self.preview_label.setMinimumHeight(200)
-        self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.preview_label.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
         sidebar_vbox.addWidget(self.preview_label, 6)
 
         sidebar_vbox.addSpacing(18)
@@ -386,7 +410,8 @@ class OCRMainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFixedHeight(32)
-        self.progress_bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.progress_bar.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.progress_bar.setFormat("%p%")
         self.progress_bar.setStyleSheet("""
             QProgressBar {
@@ -413,7 +438,8 @@ class OCRMainWindow(QMainWindow):
         logo_label = QLabel()
         logo_pixmap = QPixmap("logos.png")
         if not logo_pixmap.isNull():
-            logo_pixmap = logo_pixmap.scaled(65, 65, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(
+                65, 65, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         logo_label.setAlignment(Qt.AlignHCenter)
         sidebar_vbox.addWidget(logo_label)
@@ -442,9 +468,11 @@ class OCRMainWindow(QMainWindow):
         sidebar_vbox.addSpacing(5)
 
         # تذييل الشريط الجانبي
-        sidebar_footer = QLabel("E-mail: hejazi.mohamed@gmail.com   واتساب: 0927232437")
+        sidebar_footer = QLabel(
+            "E-mail: hejazi.mohamed@gmail.com   واتساب: 0927232437")
         sidebar_footer.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        sidebar_footer.setStyleSheet("background: transparent; color:#222; font-size:11px; padding:5px 8px;")
+        sidebar_footer.setStyleSheet(
+            "background: transparent; color:#222; font-size:11px; padding:5px 8px;")
         sidebar_vbox.addWidget(sidebar_footer)
 
         # منطقة عرض النتائج
@@ -452,9 +480,10 @@ class OCRMainWindow(QMainWindow):
         right_vbox = QVBoxLayout(right_panel)
         right_vbox.setContentsMargins(0, 0, 0, 0)
         right_vbox.setSpacing(0)
-        
+
         self.result_edit = QTextEdit()
-        self.result_edit.setPlaceholderText("سيظهر النص المستخرج هنا بعد المعالجة...")
+        self.result_edit.setPlaceholderText(
+            "سيظهر النص المستخرج هنا بعد المعالجة...")
         self.result_edit.setReadOnly(True)
         self.result_edit.setAlignment(Qt.AlignRight)
         self.result_edit.setStyleSheet("""
@@ -531,7 +560,7 @@ class OCRMainWindow(QMainWindow):
         )
         if not path:
             return
-        self.file_path        = path
+        self.file_path = path
         self.current_rotation = 0
         self.show_preview(path)
         self.process_btn.setEnabled(True)
@@ -555,7 +584,7 @@ class OCRMainWindow(QMainWindow):
                 img = Image.open(path)
             if self.current_rotation:
                 img = img.rotate(-self.current_rotation, expand=True)
-            img.thumbnail((200,200))
+            img.thumbnail((200, 200))
             rgb = img.convert('RGB')
             w, h = rgb.size
             bpl = 3 * w
@@ -573,7 +602,7 @@ class OCRMainWindow(QMainWindow):
 
     def start_ocr(self):
         self.result_edit.clear()
-        self.progress_bar.setRange(0,1)
+        self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
         self.process_btn.setEnabled(False)
         self.cancel_btn.setVisible(True)
@@ -603,13 +632,14 @@ class OCRMainWindow(QMainWindow):
     def ocr_finished(self, text):
         elapsed = time.time() - self.ocr_start_time
         text += f"\n\n--- المدة: {elapsed:.2f} ثانية ---"
-        self.result_edit.setPlainText(text)   
+        self.result_edit.setPlainText(text)
         self.process_btn.setEnabled(True)
         self.save_btn.setEnabled(True)
         self.cancel_btn.setVisible(False)
-        self.progress_bar.setRange(0,1)
+        self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
-        QMessageBox.information(self, "انتهى", f"اكتملت المعالجة في {elapsed:.2f} ثانية")
+        QMessageBox.information(
+            self, "انتهى", f"اكتملت المعالجة في {elapsed:.2f} ثانية")
 
     def handle_error(self, msg):
         QMessageBox.critical(self, "خطأ في OCR", msg)
@@ -617,7 +647,7 @@ class OCRMainWindow(QMainWindow):
         self.process_btn.setEnabled(True)
         self.save_btn.setEnabled(False)
         self.cancel_btn.setVisible(False)
-        self.progress_bar.setRange(0,1)
+        self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
         send_email("OCR App Error", msg)
 
@@ -649,7 +679,7 @@ class OCRMainWindow(QMainWindow):
         )
         if ok and len(issue.strip()) >= 3:
             with open("ocr_issue_reports.txt", "a", encoding="utf-8") as f:
-                f.write(issue.strip() + "\n" + "-"*60 + "\n")
+                f.write(issue.strip() + "\n" + "-" * 60 + "\n")
             send_email("OCR App - بلاغ عن مشكلة", issue.strip())
             QMessageBox.information(self, "شكراً", "تم إرسال البلاغ بنجاح.")
         else:
@@ -658,7 +688,8 @@ class OCRMainWindow(QMainWindow):
     def check_for_updates(self):
         current_version = "1.1.0"
         self.update_checker = UpdateChecker(current_version)
-        self.update_checker.update_available.connect(self.handle_update_notification)
+        self.update_checker.update_available.connect(
+            self.handle_update_notification)
         self.update_checker.start()
 
     def handle_update_notification(self, is_newer, changelog):
@@ -671,7 +702,8 @@ class OCRMainWindow(QMainWindow):
             if reply == QMessageBox.Yes:
                 self.download_update()
         else:
-            QMessageBox.information(self, "لا يوجد تحديث", "أنت تستخدم آخر إصدار.")
+            QMessageBox.information(
+                self, "لا يوجد تحديث", "أنت تستخدم آخر إصدار.")
 
     def download_update(self):
         url = "https://github.com/Hejazimohamed/ocr-update_final/releases/latest/download/update_temp.zip"
@@ -687,11 +719,14 @@ class OCRMainWindow(QMainWindow):
     def finish_update(self, success):
         if success:
             QMessageBox.information(
-                self, "تم التحميل",
-                "تم تحميل التحديث في `update_temp.zip`. يرجى استبدال الملفات يدويًا."
-            )
+                self,
+                "تم التحميل",
+                "تم تحميل التحديث في `update_temp.zip`. يرجى استبدال الملفات يدويًا.")
         else:
-            QMessageBox.critical(self, "فشل التحميل", "لم يتم تحميل التحديث. حاول لاحقًا.")
+            QMessageBox.critical(
+                self,
+                "فشل التحميل",
+                "لم يتم تحميل التحديث. حاول لاحقًا.")
 
     def send_periodic_status(self):
         send_email("OCR App Status", "التطبيق يعمل بشكل طبيعي.")
@@ -704,6 +739,7 @@ class OCRMainWindow(QMainWindow):
         urls = event.mimeData().urls()
         if urls:
             self.import_file()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

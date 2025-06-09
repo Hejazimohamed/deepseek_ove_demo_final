@@ -1,6 +1,7 @@
-﻿import pytest
+import pytest
 from PIL import Image
 from main_window import preprocess_image_advanced
+
 
 def test_preprocess_image_advanced_returns_image():
     img = Image.new('RGB', (100, 100), color='white')

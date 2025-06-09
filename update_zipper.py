@@ -1,10 +1,11 @@
-﻿import sys
+import sys
 import os
 import zipfile
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog,
     QLabel, QListWidget, QMessageBox
 )
+
 
 class UpdateZipper(QWidget):
     def __init__(self):
@@ -35,8 +36,10 @@ class UpdateZipper(QWidget):
         self.setLayout(self.layout)
 
     def add_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "اختر الملفات", "", "All Files (*)")
-        existing = {self.file_list.item(i).text() for i in range(self.file_list.count())}
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "اختر الملفات", "", "All Files (*)")
+        existing = {self.file_list.item(i).text()
+                    for i in range(self.file_list.count())}
         for f in files:
             if f not in existing:
                 self.file_list.addItem(f)
@@ -56,12 +59,14 @@ class UpdateZipper(QWidget):
                 for i in range(self.file_list.count()):
                     file_path = self.file_list.item(i).text()
                     if not os.path.isfile(file_path):
-                        raise FileNotFoundError(f"الملف غير موجود: {file_path}")
+                        raise FileNotFoundError(
+                            f"الملف غير موجود: {file_path}")
                     arcname = os.path.basename(file_path)
                     zipf.write(file_path, arcname)
             QMessageBox.information(self, "تم", f"تم إنشاء الملف:\n{zip_path}")
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل إنشاء ملف التحديث: {e}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -1,4 +1,5 @@
-﻿import importlib
+import importlib
+
 
 def check_dependencies():
     required_modules = {

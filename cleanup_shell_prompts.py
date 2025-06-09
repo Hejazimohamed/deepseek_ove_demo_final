@@ -10,10 +10,12 @@ def clean_file(path: pathlib.Path):
         path.write_text(cleaned, encoding='utf-8')
         print(f"[Cleaned] {path}")
 
+
 def main():
     base = pathlib.Path(__file__).parent
     for py in base.rglob('*.py'):
         clean_file(py)
+
 
 if __name__ == '__main__':
     main()

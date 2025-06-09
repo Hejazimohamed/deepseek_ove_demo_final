@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import logging
 import traceback
 import os
@@ -11,9 +11,11 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s]: %(message)s"
 )
 
+
 def is_headless():
     """تحديد إذا كانت البيئة بدون واجهة رسومية (تيرمنال فقط)"""
     return os.environ.get("DISPLAY", "") == "" and sys.platform != "win32"
+
 
 def show_critical_message(title, msg):
     """إظهار رسالة حرجة للمستخدم سواء بواجهة رسومية أو طرفية"""
@@ -27,18 +29,22 @@ def show_critical_message(title, msg):
     except Exception as e:
         print(f"خطأ أثناء عرض الرسالة: {e}\n{title}\n{msg}")
 
+
 def check_and_alert_dependencies():
     from utils import check_dependencies
     missing = check_dependencies()
     if missing:
-        msg = "المتطلبات التالية غير متوفرة:\n- " + "\n- ".join(missing) + "\n\nيرجى تثبيتها أولاً."
+        msg = "المتطلبات التالية غير متوفرة:\n- " + \
+            "\n- ".join(missing) + "\n\nيرجى تثبيتها أولاً."
         show_critical_message("نقص في المتطلبات", msg)
         sys.exit(1)
+
 
 def check_environment():
     # نظام التشغيل
     if sys.platform not in ("linux", "win32", "darwin"):
-        show_critical_message("بيئة غير مدعومة", f"النظام ({sys.platform}) غير مدعوم رسمياً.")
+        show_critical_message("بيئة غير مدعومة",
+                              f"النظام ({sys.platform}) غير مدعوم رسمياً.")
         sys.exit(1)
 
     # إصدار PyQt5
@@ -46,11 +52,14 @@ def check_environment():
         import PyQt5
         from PyQt5.QtCore import QT_VERSION_STR
         if tuple(map(int, QT_VERSION_STR.split('.'))) < (5, 12):
-            show_critical_message("إصدار PyQt5 قديم", f"الحد الأدنى المدعوم: 5.12. الإصدار الحالي: {QT_VERSION_STR}")
+            show_critical_message(
+                "إصدار PyQt5 قديم",
+                f"الحد الأدنى المدعوم: 5.12. الإصدار الحالي: {QT_VERSION_STR}")
             sys.exit(1)
     except Exception as e:
         show_critical_message("خطأ PyQt5", f"تعذر التحقق من إصدار PyQt5: {e}")
         sys.exit(1)
+
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     """تسجيل الأعطال + إرسال تقرير عبر البريد + إنشاء نسخة احتياطية"""
@@ -59,8 +68,17 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
 
     # سجل الخطأ بالتفصيل
-    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    error_details = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    logging.error(
+        "Uncaught exception",
+        exc_info=(
+            exc_type,
+            exc_value,
+            exc_traceback))
+    error_details = "".join(
+        traceback.format_exception(
+            exc_type,
+            exc_value,
+            exc_traceback))
     user_alerts = []
 
     # إرسال تقرير بريد إلكتروني عن الخطأ
@@ -89,9 +107,13 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
     # إعلام المستخدم بالمشاكل السابقة
     if user_alerts:
-        show_critical_message("مشاكل أثناء معالجة العطل", "\n".join(user_alerts))
+        show_critical_message(
+            "مشاكل أثناء معالجة العطل",
+            "\n".join(user_alerts))
+
 
 sys.excepthook = handle_exception
+
 
 def setup_qt_logging():
     """تفعيل تسجيل رسائل PyQt للأخطاء والتحذيرات"""
@@ -110,6 +132,7 @@ def setup_qt_logging():
     except Exception as e:
         logging.warning("qInstallMessageHandler غير مدعومة أو حدث خطأ.")
 
+
 if __name__ == "__main__":
     # سجل بدء التطبيق في سجل المستخدم
     try:
@@ -122,7 +145,9 @@ if __name__ == "__main__":
     try:
         from PyQt5.QtWidgets import QApplication
         if QApplication.instance() is not None:
-            show_critical_message("خطأ في التشغيل", "تم اكتشاف تشغيل غير طبيعي للتطبيق (QApplication مكرر). يرجى إغلاق جميع النوافذ والمحاولة من جديد.")
+            show_critical_message(
+                "خطأ في التشغيل",
+                "تم اكتشاف تشغيل غير طبيعي للتطبيق (QApplication مكرر). يرجى إغلاق جميع النوافذ والمحاولة من جديد.")
             sys.exit(1)
     except Exception:
         # إذا فشل الاستيراد، سيتم معالجة ذلك في check_environment
@@ -137,7 +162,7 @@ if __name__ == "__main__":
     try:
         from PyQt5.QtWidgets import QApplication
         from main_window import OCRMainWindow
-        
+
         app = QApplication(sys.argv)
         win = OCRMainWindow()
         win.show()

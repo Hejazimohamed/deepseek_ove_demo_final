@@ -1,4 +1,5 @@
-﻿import datetime
+import datetime
+
 
 def log_user_event(event):
     """تسجيل حدث للمستخدم مع الطابع الزمني"""

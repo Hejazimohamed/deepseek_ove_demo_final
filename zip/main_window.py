@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import logging
 import smtplib
@@ -6,11 +6,28 @@ import time
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QFileDialog, QTextEdit, QComboBox, QProgressBar, QMessageBox, QLineEdit,
-    QInputDialog, QCheckBox, QSizePolicy, QProgressDialog, QAction, QMenuBar, QDialog,
-    QListWidget, QListWidgetItem
-)
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QFileDialog,
+    QTextEdit,
+    QComboBox,
+    QProgressBar,
+    QMessageBox,
+    QLineEdit,
+    QInputDialog,
+    QCheckBox,
+    QSizePolicy,
+    QProgressDialog,
+    QAction,
+    QMenuBar,
+    QDialog,
+    QListWidget,
+    QListWidgetItem)
 from PyQt5.QtGui import QPixmap, QImage, QFont, QIcon
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PIL import Image, ImageEnhance, UnidentifiedImageError
@@ -29,10 +46,12 @@ SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 TO_EMAIL = SMTP_USER
 
+
 def send_email(subject, body, to_email=TO_EMAIL):
     if not SMTP_USER or not SMTP_PASSWORD:
         logging.error("بيانات البريد ناقصة أو غير معرفة.")
-        QMessageBox.critical(None, "خطأ", "إعدادات البريد الإلكتروني غير مكتملة!")
+        QMessageBox.critical(
+            None, "خطأ", "إعدادات البريد الإلكتروني غير مكتملة!")
         return
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = subject
@@ -46,6 +65,7 @@ def send_email(subject, body, to_email=TO_EMAIL):
     except Exception as e:
         logging.error(f"فشل في إرسال الإيميل: {e}")
 
+
 def is_easyocr_enabled():
     try:
         with open("config.txt", "r", encoding="utf-8") as f:
@@ -55,6 +75,7 @@ def is_easyocr_enabled():
     except Exception:
         return False
     return False
+
 
 class EasyOCRSingleton:
     _instance = None
@@ -68,6 +89,7 @@ class EasyOCRSingleton:
             cls._langs = langs
         return cls._instance
 
+
 def preprocess_image_advanced(pil_img):
     try:
         img_gray = pil_img.convert('L')
@@ -76,11 +98,13 @@ def preprocess_image_advanced(pil_img):
         img_sharp = ImageEnhance.Sharpness(img_bright).enhance(2.0)
         img_np = np.array(img_sharp)
         img_denoised = cv2.fastNlMeansDenoising(img_np, None, 24, 7, 21)
-        _, img_bw = cv2.threshold(img_denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _, img_bw = cv2.threshold(
+            img_denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         return Image.fromarray(img_bw)
     except Exception as ex:
         logging.error(f"preprocess_image_advanced error: {ex}")
         return pil_img
+
 
 def open_multi_page_image(file_path):
     images = []
@@ -98,12 +122,20 @@ def open_multi_page_image(file_path):
         images = []
     return images
 
+
 class OCRWorker(QThread):
     progress = pyqtSignal(int, int)
     result = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, file_path, engine, lang, roi_rel=None, rotation=0, enhance=False):
+    def __init__(
+            self,
+            file_path,
+            engine,
+            lang,
+            roi_rel=None,
+            rotation=0,
+            enhance=False):
         super().__init__()
         self.file_path = file_path
         self.engine = engine
@@ -147,7 +179,8 @@ class OCRWorker(QThread):
                 images = [self.file_path]
             total_pages = len(images)
             if total_pages > 20:
-                self.error.emit("تنبيه: الملف يحتوي على صفحات كثيرة. قد يسبب بطء أو استهلاك ذاكرة.")
+                self.error.emit(
+                    "تنبيه: الملف يحتوي على صفحات كثيرة. قد يسبب بطء أو استهلاك ذاكرة.")
             for idx, img in enumerate(images):
                 if self._cancelled:
                     self.error.emit("تم إلغاء المعالجة من قبل المستخدم.")
@@ -177,15 +210,20 @@ class OCRWorker(QThread):
                 try:
                     if self.engine in ["Tesseract", "كلاهما"]:
                         import pytesseract
-                        text_tess = pytesseract.image_to_string(im_proc, lang=self.lang, config=custom_config)
-                        result_texts.append((f"Tesseract صفحة {idx+1}", text_tess.strip()))
+                        text_tess = pytesseract.image_to_string(
+                            im_proc, lang=self.lang, config=custom_config)
+                        result_texts.append(
+                            (f"Tesseract صفحة {idx+1}", text_tess.strip()))
                     if self.engine in ["EasyOCR", "كلاهما"] and reader:
                         img_np = np.array(im_proc)
-                        result = reader.readtext(img_np, detail=0, paragraph=True)
+                        result = reader.readtext(
+                            img_np, detail=0, paragraph=True)
                         text_easy = "\n".join(result).strip()
-                        result_texts.append((f"EasyOCR صفحة {idx+1}", text_easy))
+                        result_texts.append(
+                            (f"EasyOCR صفحة {idx+1}", text_easy))
                 except MemoryError:
-                    self.error.emit("نفدت ذاكرة النظام أثناء المعالجة. حاول تقليل حجم الملف أو الصفحات.")
+                    self.error.emit(
+                        "نفدت ذاكرة النظام أثناء المعالجة. حاول تقليل حجم الملف أو الصفحات.")
                     return
                 except Exception as ex:
                     self.error.emit(f"خطأ أثناء معالجة الصفحة: {ex}")
@@ -201,6 +239,7 @@ class OCRWorker(QThread):
 
     def cancel(self):
         self._cancelled = True
+
 
 class OCRMainWindow(QMainWindow):
     def __init__(self):
@@ -231,7 +270,8 @@ class OCRMainWindow(QMainWindow):
     def notify_update_if_available(self):
         current_version = "1.1.0"
         self.update_checker = UpdateChecker(current_version)
-        self.update_checker.update_available.connect(self.handle_update_notification)
+        self.update_checker.update_available.connect(
+            self.handle_update_notification)
         self.update_checker.start()
 
     def handle_update_notification(self, is_newer, changelog):
@@ -315,7 +355,8 @@ class OCRMainWindow(QMainWindow):
         if ok:
             success, path = self.backup_manager.create_backup(comment)
             if success:
-                QMessageBox.information(self, "نجاح", f"تم إنشاء النسخة في: {path}")
+                QMessageBox.information(
+                    self, "نجاح", f"تم إنشاء النسخة في: {path}")
             else:
                 QMessageBox.critical(self, "خطأ", f"فشل في الإنشاء: {path}")
 
@@ -337,7 +378,9 @@ class OCRMainWindow(QMainWindow):
         layout.addWidget(QLabel("اختر نسخة للاستعادة:"))
         layout.addWidget(backup_list)
         btn_restore = QPushButton("استعادة")
-        btn_restore.clicked.connect(lambda: self.restore_selected(backup_list, dialog))
+        btn_restore.clicked.connect(
+            lambda: self.restore_selected(
+                backup_list, dialog))
         layout.addWidget(btn_restore)
         dialog.setLayout(layout)
         dialog.exec_()
@@ -349,7 +392,8 @@ class OCRMainWindow(QMainWindow):
             return
         backup_path = selected.data(Qt.UserRole)
         if self.backup_manager.restore_backup(backup_path):
-            QMessageBox.information(self, "نجاح", "تم الاستعادة بنجاح! أعد تشغيل التطبيق.")
+            QMessageBox.information(
+                self, "نجاح", "تم الاستعادة بنجاح! أعد تشغيل التطبيق.")
             dialog.close()
         else:
             QMessageBox.critical(self, "خطأ", "فشل في استعادة النسخة")
@@ -369,13 +413,15 @@ class OCRMainWindow(QMainWindow):
 
     def rotate_image(self):
         if self.file_path:
-            self.current_image_rotation = (self.current_image_rotation + 90) % 360
+            self.current_image_rotation = (
+                self.current_image_rotation + 90) % 360
             self.show_preview(self.file_path)
 
     def show_preview(self, file_path):
         try:
             if file_path.lower().endswith('.pdf'):
-                images = convert_from_path(file_path, first_page=1, last_page=1, dpi=100)
+                images = convert_from_path(
+                    file_path, first_page=1, last_page=1, dpi=100)
                 img = images[0]
             elif file_path.lower().endswith(('.tiff', '.tif')):
                 images = open_multi_page_image(file_path)
@@ -387,7 +433,11 @@ class OCRMainWindow(QMainWindow):
             if img:
                 img.thumbnail((200, 200))
                 data = img.convert("RGB").tobytes("raw", "RGB")
-                qimg = QImage(data, img.size[0], img.size[1], QImage.Format_RGB888)
+                qimg = QImage(
+                    data,
+                    img.size[0],
+                    img.size[1],
+                    QImage.Format_RGB888)
                 pixmap = QPixmap.fromImage(qimg)
                 self.preview_label.setPixmap(pixmap)
             else:
@@ -420,7 +470,8 @@ class OCRMainWindow(QMainWindow):
         self.progress_bar.setValue(percent)
 
     def ocr_finished(self, text):
-        elapsed = time.time() - self.ocr_start_time if hasattr(self, 'ocr_start_time') else None
+        elapsed = time.time() - self.ocr_start_time if hasattr(self,
+                                                               'ocr_start_time') else None
         if elapsed:
             text += f"\n\n--------------------\nالمدة: {elapsed:.2f} ثانية"
         self.result_edit.setPlainText(text)
@@ -428,10 +479,14 @@ class OCRMainWindow(QMainWindow):
         self.save_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
         if elapsed:
-            QMessageBox.information(self, "وقت المعالجة", f"تمت معالجة الملف في {elapsed:.2f} ثانية")
+            QMessageBox.information(
+                self,
+                "وقت المعالجة",
+                f"تمت معالجة الملف في {elapsed:.2f} ثانية")
 
     def handle_error(self, error_msg):
-        self.result_edit.setPlainText("حدث خطأ أثناء استخراج النص:\n" + error_msg)
+        self.result_edit.setPlainText(
+            "حدث خطأ أثناء استخراج النص:\n" + error_msg)
         self.process_btn.setEnabled(True)
         self.save_btn.setEnabled(False)
         self.cancel_btn.setEnabled(False)
@@ -462,21 +517,24 @@ class OCRMainWindow(QMainWindow):
                 QMessageBox.critical(self, "خطأ", f"لم يتم حفظ النص:\n{e}")
 
     def report_issue(self):
-        issue, ok = QInputDialog.getMultiLineText(self, "إبلاغ عن مشكلة", "يرجى وصف المشكلة:")
+        issue, ok = QInputDialog.getMultiLineText(
+            self, "إبلاغ عن مشكلة", "يرجى وصف المشكلة:")
         if ok:
             if not issue.strip() or len(issue.strip()) < 3:
-                QMessageBox.warning(self, "تحذير", "يجب كتابة وصف واضح للمشكلة (أكثر من 3 أحرف).")
+                QMessageBox.warning(
+                    self, "تحذير", "يجب كتابة وصف واضح للمشكلة (أكثر من 3 أحرف).")
                 return
             try:
                 with open("ocr_issue_reports.txt", "a", encoding="utf-8") as f:
-                    f.write(issue.strip() + "\n" + "-"*60 + "\n")
+                    f.write(issue.strip() + "\n" + "-" * 60 + "\n")
             except Exception:
                 pass
             send_email(
                 "OCR App - بلاغ عن مشكلة",
                 f"تم الإبلاغ عن مشكلة جديدة:\n\n{issue.strip()}"
             )
-            QMessageBox.information(self, "شكرًا", "تم إرسال البلاغ بنجاح.\nشكرًا لمساهمتك!")
+            QMessageBox.information(
+                self, "شكرًا", "تم إرسال البلاغ بنجاح.\nشكرًا لمساهمتك!")
 
     def check_for_updates(self):
         current_version = "1.1.0"
@@ -490,26 +548,32 @@ class OCRMainWindow(QMainWindow):
             if agree:
                 self.download_update()
         else:
-            QMessageBox.information(self, "لا يوجد تحديث", "أنت تستخدم آخر إصدار من التطبيق.")
+            QMessageBox.information(
+                self, "لا يوجد تحديث", "أنت تستخدم آخر إصدار من التطبيق.")
 
     def download_update(self):
         update_url = "https://github.com/Hejazimohamed/ocr-update_final/releases/latest/download/update_temp.zip"
         self.update_applier = UpdateApplier(update_url)
-        self.progress_dialog = QProgressDialog("جاري تحميل التحديث...", "إلغاء", 0, 100, self)
+        self.progress_dialog = QProgressDialog(
+            "جاري تحميل التحديث...", "إلغاء", 0, 100, self)
         self.progress_dialog.setWindowModality(Qt.WindowModal)
-        self.progress_dialog.canceled.connect(self.update_applier.requestInterruption)
+        self.progress_dialog.canceled.connect(
+            self.update_applier.requestInterruption)
         self.update_applier.progress.connect(self.progress_dialog.setValue)
         self.update_applier.finished.connect(self.finish_update)
         self.update_applier.start()
         self.progress_dialog.exec_()
 
-
     def finish_update(self, success):
         self.progress_dialog.close()
         if success:
-            QMessageBox.information(self, "تم التحميل", "تم تحميل التحديث بنجاح في الملف: update_temp.zip\nيرجى فك الضغط واستبدال الملفات يدوياً.")
+            QMessageBox.information(
+                self,
+                "تم التحميل",
+                "تم تحميل التحديث بنجاح في الملف: update_temp.zip\nيرجى فك الضغط واستبدال الملفات يدوياً.")
         else:
-            QMessageBox.critical(self, "خطأ", "فشل تحميل التحديث.\nيرجى المحاولة لاحقاً.")
+            QMessageBox.critical(
+                self, "خطأ", "فشل تحميل التحديث.\nيرجى المحاولة لاحقاً.")
 
     def send_periodic_status(self):
         send_email(

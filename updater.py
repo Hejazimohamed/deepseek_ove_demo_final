@@ -1,4 +1,4 @@
-﻿import json
+import json
 import requests
 import logging
 import zipfile
@@ -9,6 +9,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import QMessageBox
 
 from packaging import version  # لتحسين مقارنة الإصدارات
+
 
 class UpdateChecker(QThread):
     update_available = pyqtSignal(bool, str)
@@ -23,17 +24,19 @@ class UpdateChecker(QThread):
         try:
             response = requests.get(
                 "https://raw.githubusercontent.com/Hejazimohamed/ocr-update_final/main/version.json",
-                timeout=10
-            )
+                timeout=10)
             data = response.json()
             self.latest_version = data.get("version")
             self.changelog = data.get("changelog", "")
 
             # مقارنة الإصدارات النصية بدقة
-            is_newer = version.parse(self.latest_version) > version.parse(self.current_version)
+            is_newer = version.parse(
+                self.latest_version) > version.parse(
+                self.current_version)
             self.update_available.emit(is_newer, self.changelog)
         except Exception as e:
             logging.error(f"فشل التحقق من التحديث: {e}")
+
 
 class UpdateApplier(QThread):
     progress = pyqtSignal(int)
@@ -60,7 +63,8 @@ class UpdateApplier(QThread):
                     f.write(data)
                     downloaded += len(data)
                     if total_size > 0:
-                        self.progress.emit(int((downloaded / total_size) * 100))
+                        self.progress.emit(
+                            int((downloaded / total_size) * 100))
 
             # 2. تنزيل ملف التوقيع الرقمي
             sig_url = self.update_url + ".sig"
@@ -73,12 +77,14 @@ class UpdateApplier(QThread):
                 self.show_message(
                     "فشل في التحقق من التحديث!",
                     "⚠️ ملف التحديث لم يجتز التحقق الرقمي. تم إلغاء التحديث لأسباب أمنية.",
-                    icon=QMessageBox.Critical
-                )
-                self.finished.emit(False, "فشل التحقق من سلامة التحديث (التوقيع الرقمي غير صحيح).")
+                    icon=QMessageBox.Critical)
+                self.finished.emit(
+                    False, "فشل التحقق من سلامة التحديث (التوقيع الرقمي غير صحيح).")
                 # حذف الملفات المؤقتة
-                if os.path.exists(self.temp_zip): os.remove(self.temp_zip)
-                if os.path.exists(self.temp_sig): os.remove(self.temp_sig)
+                if os.path.exists(self.temp_zip):
+                    os.remove(self.temp_zip)
+                if os.path.exists(self.temp_sig):
+                    os.remove(self.temp_sig)
                 return
 
             # 4. إذا التحقق ناجح، أبلغ المستخدم وواصل التحديث
@@ -108,8 +114,7 @@ class UpdateApplier(QThread):
             self.show_message(
                 "خطأ في التحقق",
                 "ملف المفتاح العام (hejazi_public.asc) غير موجود في مجلد التطبيق.",
-                icon=QMessageBox.Critical
-            )
+                icon=QMessageBox.Critical)
             return False
         # استيراد المفتاح العام (مرة واحدة لكل جهاز)
         with open(self.public_key_path, 'r') as f:
@@ -138,11 +143,13 @@ class UpdateApplier(QThread):
         if os.path.exists(self.temp_sig):
             os.remove(self.temp_sig)
 
+
 def prompt_user_for_update(changelog, parent=None):
     msg = QMessageBox(parent)
     msg.setIcon(QMessageBox.Information)
     msg.setWindowTitle("تحديث متوفر")
     msg.setText("تحديث جديد متوفر!")
-    msg.setInformativeText(f"سجل التغييرات:\n{changelog}\n\nهل تريد المتابعة بالتحديث؟")
+    msg.setInformativeText(
+        f"سجل التغييرات:\n{changelog}\n\nهل تريد المتابعة بالتحديث؟")
     msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     return msg.exec_() == QMessageBox.Yes

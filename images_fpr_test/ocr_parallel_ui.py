@@ -1,8 +1,16 @@
-﻿from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QCheckBox, QFileDialog, QListWidget, QMessageBox
-)
+from PyQt5.QtWidgets import (
+    QApplication,
+    QWidget,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QCheckBox,
+    QFileDialog,
+    QListWidget,
+    QMessageBox)
 import concurrent.futures
 import sys
+
 
 def extract_text_from_image(path):
     # مكان دالة ocr الخاصة بك
@@ -10,13 +18,15 @@ def extract_text_from_image(path):
     time.sleep(2)  # محاكاة بطء المعالجة
     return f"النص المستخرج من {path}"
 
+
 class OCRParallelWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("OCR مع معالجة متوازية")
         self.layout = QVBoxLayout()
         self.file_list = QListWidget()
-        self.parallel_checkbox = QCheckBox("معالجة متوازية (أنصح بها للملفات الكثيرة)")
+        self.parallel_checkbox = QCheckBox(
+            "معالجة متوازية (أنصح بها للملفات الكثيرة)")
         self.parallel_checkbox.setChecked(True)
         self.select_btn = QPushButton("اختر صورًا")
         self.start_btn = QPushButton("بدء الاستخراج")
@@ -30,7 +40,8 @@ class OCRParallelWidget(QWidget):
         self.selected_files = []
 
     def select_images(self):
-        fnames, _ = QFileDialog.getOpenFileNames(self, "اختر صور", "", "Images (*.png *.jpg *.bmp)")
+        fnames, _ = QFileDialog.getOpenFileNames(
+            self, "اختر صور", "", "Images (*.png *.jpg *.bmp)")
         if fnames:
             self.selected_files = fnames
             self.file_list.clear()
@@ -44,7 +55,10 @@ class OCRParallelWidget(QWidget):
         if self.parallel_checkbox.isChecked():
             # معالجة متوازية
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future_to_path = {executor.submit(extract_text_from_image, path): path for path in self.selected_files}
+                future_to_path = {
+                    executor.submit(
+                        extract_text_from_image,
+                        path): path for path in self.selected_files}
                 for future in concurrent.futures.as_completed(future_to_path):
                     path = future_to_path[future]
                     try:
@@ -63,6 +77,7 @@ class OCRParallelWidget(QWidget):
         # عرض النتائج (هنا فقط نافذة بسيطة)
         msg = "\n\n".join([f"{path}:\n{text}" for path, text in results])
         QMessageBox.information(self, "النتائج", msg)
+
 
 # الاستخدام
 if __name__ == "__main__":

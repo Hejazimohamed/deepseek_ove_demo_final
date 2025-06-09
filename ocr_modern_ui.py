@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QComboBox, QCheckBox,
     QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QFileDialog, QSizePolicy
@@ -68,6 +68,7 @@ QPushButton:hover {
 }
 """
 
+
 class OCRApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -95,18 +96,21 @@ class OCRApp(QWidget):
 
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(["Tesseract"])
-        self.engine_combo.setStyleSheet("font-size: 12px; min-width: 72px; max-width: 110px;")
+        self.engine_combo.setStyleSheet(
+            "font-size: 12px; min-width: 72px; max-width: 110px;")
         self.engine_combo.setMinimumWidth(72)
         self.engine_combo.setMaximumWidth(110)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["ara+eng", "ara", "eng"])
-        self.lang_combo.setStyleSheet("font-size: 12px; min-width: 72px; max-width: 110px;")
+        self.lang_combo.setStyleSheet(
+            "font-size: 12px; min-width: 72px; max-width: 110px;")
         self.lang_combo.setMinimumWidth(72)
         self.lang_combo.setMaximumWidth(110)
 
         self.enhance_checkbox = QCheckBox()
-        self.enhance_checkbox.setToolTip("تفعيل تحسين الصورة (تصحيح الميل والتباين)")
+        self.enhance_checkbox.setToolTip(
+            "تفعيل تحسين الصورة (تصحيح الميل والتباين)")
         self.enhance_checkbox.setFixedWidth(22)
 
         settings_bar = QHBoxLayout()
@@ -158,7 +162,8 @@ class OCRApp(QWidget):
             "border: 1px solid #CCC; background: #F9F9F9; min-width: 120px; min-height: 200px; font-size: 12px; color: #888; border-radius: 10px;"
         )
         self.image_preview.setMinimumHeight(200)
-        self.image_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.image_preview.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
         sidebar_vbox.addWidget(self.image_preview, 6)
 
         sidebar_vbox.addSpacing(18)
@@ -166,8 +171,10 @@ class OCRApp(QWidget):
         self.progress_bar_preview.setValue(0)
         self.progress_bar_preview.setTextVisible(True)
         self.progress_bar_preview.setFixedHeight(32)
-        self.progress_bar_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.progress_bar_preview.setFormat("%p%")  # سيظهر فقط النسبة (مثلاً "0%")
+        self.progress_bar_preview.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.progress_bar_preview.setFormat(
+            "%p%")  # سيظهر فقط النسبة (مثلاً "0%")
         # هنا: محاذاة النسبة لليسار مع padding مناسب + لون رصاصي خافت
         self.progress_bar_preview.setStyleSheet("""
             QProgressBar {
@@ -193,7 +200,8 @@ class OCRApp(QWidget):
         logo_label = QLabel()
         logo_pixmap = QPixmap("logos.png")
         if not logo_pixmap.isNull():
-            logo_pixmap = logo_pixmap.scaled(65, 65, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(
+                65, 65, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         logo_label.setAlignment(Qt.AlignHCenter)
         sidebar_vbox.addWidget(logo_label)
@@ -218,9 +226,11 @@ class OCRApp(QWidget):
 
         sidebar_vbox.addSpacing(5)
 
-        sidebar_footer = QLabel("E-mail: hejazi.mohamed@gmail.com   واتساب: 0927232437")
+        sidebar_footer = QLabel(
+            "E-mail: hejazi.mohamed@gmail.com   واتساب: 0927232437")
         sidebar_footer.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        sidebar_footer.setStyleSheet("background: transparent; color:#222; font-size:11px; padding:5px 8px;")
+        sidebar_footer.setStyleSheet(
+            "background: transparent; color:#222; font-size:11px; padding:5px 8px;")
         sidebar_vbox.addWidget(sidebar_footer)
 
         right_panel = QWidget()
@@ -228,7 +238,8 @@ class OCRApp(QWidget):
         right_vbox.setContentsMargins(0, 0, 0, 0)
         right_vbox.setSpacing(0)
         self.output_box = QTextEdit()
-        self.output_box.setPlaceholderText("سيظهر النص المستخرج هنا بعد المعالجة...")
+        self.output_box.setPlaceholderText(
+            "سيظهر النص المستخرج هنا بعد المعالجة...")
         self.output_box.setAlignment(Qt.AlignRight)
         self.output_box.setStyleSheet("""
             QTextEdit {
@@ -247,7 +258,8 @@ class OCRApp(QWidget):
         root_vbox.addLayout(main_hbox, 1)
 
     def import_image(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "اختر صورة", "", "Images (*.png *.jpg *.jpeg *.bmp)")
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "اختر صورة", "", "Images (*.png *.jpg *.jpeg *.bmp)")
         if file_name:
             pixmap = QPixmap(file_name)
             if not pixmap.isNull():
@@ -262,6 +274,7 @@ class OCRApp(QWidget):
                 self.image_preview.setText("تعذر تحميل الصورة")
         else:
             self.image_preview.setText("لم يتم تحميل صورة بعد")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
