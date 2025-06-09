@@ -1,21 +1,17 @@
-#!/usr/bin/env python3
-import pathlib
 import re
 
-
-def clean_file(path: pathlib.Path):
-    text = path.read_text(encoding='utf-8-sig')
-    cleaned = SHELL_PROMPT_PATTERN.sub('', text)
-    if text != cleaned:
-        path.write_text(cleaned, encoding='utf-8')
-        print(f"[Cleaned] {path}")
+# يلتقط بدايات سطور بايثون التفاعلية (>>> ...) أو النقاط الثلاث (...)
+SHELL_PROMPT_PATTERN = re.compile(r'^\s*(>>>|\.\.\.)\s?')
 
 
-def main():
-    base = pathlib.Path(__file__).parent
-    for py in base.rglob('*.py'):
-        clean_file(py)
+def cleanup_shell_prompts(path: str) -> None:
+    """
+    يزيل علامات الموجه التفاعلي (>>> أو ...) من كل سطر في الملف.
+    """
+    with open(path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
 
+    cleaned_lines = [SHELL_PROMPT_PATTERN.sub('', line) for line in lines]
 
-if __name__ == '__main__':
-    main()
+    with open(path, 'w', encoding='utf-8') as f:
+        f.writelines(cleaned_lines)
