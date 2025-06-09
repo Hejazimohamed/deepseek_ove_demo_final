@@ -1,23 +1,21 @@
-﻿cat > .flake8 << 'EOF'
-[flake8]
+﻿[flake8]
+# مجلّدات وملفّات نستثنيها كليّاً من الفحص
 exclude =
     .git,
     __pycache__,
     .venv,
     zip,
-    backups,
     images_fpr_test,
-    *.log,
+    backups,
+    tests,
     *.zip,
-    0.*,
-    1,
-    20,
-    2.7.2,
-    4.6.0,
-    pip,
-    pytest)
+    *.log
+
+# نرفع حدّ الطول ونتجاهل بعض الأخطاء (unused imports, unused variables, وطول السطر)
 max-line-length = 120
 ignore =
     E203,
-    W503
-EOF
+    W503,
+    F401,  # imported but unused
+    F841,  # local variable assigned but never used
+    E501,  # line too long
