@@ -1,5 +1,4 @@
 ﻿[flake8]
-# مجلّدات وملفّات نستثنيها كليّاً من الفحص
 exclude =
     .git,
     __pycache__,
@@ -10,13 +9,8 @@ exclude =
     tests,
     *.zip,
     *.log
-
-# نرفع حدّ الطول ونُبقي على مجموعة رموز للتجاهل:
-# - E203 و W503 (مساحات قبل/بعد العمليات)
-# - F401 (imported but unused)
-# - F841 (assigned but never used)
-# - E501 (line too long)
 max-line-length = 120
+
 ignore =
     E203,
     W503,
