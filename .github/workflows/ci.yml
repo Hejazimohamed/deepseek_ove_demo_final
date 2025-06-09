@@ -35,7 +35,10 @@ jobs:
           pip install pytest pytest-qt flake8 mypy
 
       - name: Lint with flake8
-        run: flake8 . --max-line-length=120 --ignore=E203,W503,E501,F401,F841
+        run: |
+          flake8 . \
+            --max-line-length=120 \
+            --ignore=E203,W503,E501,F401,F841
 
       - name: Type-check with mypy
         run: mypy --ignore-missing-imports .
