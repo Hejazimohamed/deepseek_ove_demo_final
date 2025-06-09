@@ -1,9 +1,10 @@
-﻿import os
+import os
 import shutil
 import json
 import logging
 from datetime import datetime
 from PyQt5.QtCore import QTimer
+
 
 class BackupManager:
     def __init__(self, settings_path='settings.json', backup_dir='backups'):
