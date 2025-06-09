@@ -1,0 +1,23 @@
+﻿cat > .flake8 << 'EOF'
+[flake8]
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    zip,
+    backups,
+    images_fpr_test,
+    *.log,
+    *.zip,
+    0.*,
+    1,
+    20,
+    2.7.2,
+    4.6.0,
+    pip,
+    pytest)
+max-line-length = 120
+ignore =
+    E203,
+    W503
+EOF
