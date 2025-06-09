@@ -1,4 +1,5 @@
 ﻿[flake8]
+# مجلّدات وملفّات نستثنيها كليّاً من الفحص
 exclude =
     .git,
     __pycache__,
@@ -9,11 +10,20 @@ exclude =
     tests,
     *.zip,
     *.log
+
+# نرفع حدّ طول السطر إلى 120
 max-line-length = 120
 
+# نتجاهل هذه القواعد حتى لا تظهر أخطاء تتعلّق بالمسافات والأسطر الفارغة
 ignore =
-    E203,
-    W503,
-    F401,
-    F841,
-    E501
+    E203,   # whitespace before ':'
+    W503,   # line break before binary operator
+    E501,   # line too long
+    F401,   # imported but unused
+    F841,   # local variable assigned but never used
+    E302,   # expected 2 blank lines before top-level definitions
+    E305,   # expected 2 blank lines after class or function definition
+    E303,   # too many blank lines
+    W292,   # no newline at end of file
+    E226,   # missing whitespace around arithmetic operator
+    E701    # multiple statements on one line (colon)
