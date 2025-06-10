@@ -1,3 +1,4 @@
+﻿# ملف ocr_modern_ui.py
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QComboBox, QCheckBox,
@@ -86,31 +87,36 @@ class OCRApp(QWidget):
         self.import_btn = QPushButton("استيراد صور")
         self.import_btn.setStyleSheet(button_style)
         self.import_btn.clicked.connect(self.import_image)
+
         self.rotate_btn = QPushButton("تدوير الصورة")
         self.rotate_btn.setStyleSheet(button_style)
 
         self.start_btn = QPushButton("إبدأ المعالجة")
         self.start_btn.setStyleSheet(button_style)
+
         self.save_btn = QPushButton("حفظ النص")
         self.save_btn.setStyleSheet(button_style)
 
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(["Tesseract"])
         self.engine_combo.setStyleSheet(
-            "font-size: 12px; min-width: 72px; max-width: 110px;")
+            "font-size: 12px; min-width: 72px; max-width: 110px;"
+        )
         self.engine_combo.setMinimumWidth(72)
         self.engine_combo.setMaximumWidth(110)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["ara+eng", "ara", "eng"])
         self.lang_combo.setStyleSheet(
-            "font-size: 12px; min-width: 72px; max-width: 110px;")
+            "font-size: 12px; min-width: 72px; max-width: 110px;"
+        )
         self.lang_combo.setMinimumWidth(72)
         self.lang_combo.setMaximumWidth(110)
 
         self.enhance_checkbox = QCheckBox()
         self.enhance_checkbox.setToolTip(
-            "تفعيل تحسين الصورة (تصحيح الميل والتباين)")
+            "تفعيل تحسين الصورة (تصحيح الميل والتباين)"
+        )
         self.enhance_checkbox.setFixedWidth(22)
 
         settings_bar = QHBoxLayout()
@@ -134,7 +140,7 @@ class OCRApp(QWidget):
         toolbar.addWidget(self.save_btn)
 
         tips_label = QLabel(
-            "يرجى رفع صورة واضحة، مسطحة، بدون ميل أو ظلال. للحصول على أفضل نتيجة، ضع الورقة على سطح مستوٍ وصوّر من الأعلى مباشرة."
+            "يرجى رفع صورة واضحة، مسطحة، بدون ميل أو ظلال. للحصول على أفضل نتيجة، ضَع الورقة على سطح مستوٍ وصوِّر من الأعلى مباشرة."
         )
         tips_label.setFont(QFont("Tahoma", 12))
         tips_label.setStyleSheet(
@@ -163,7 +169,8 @@ class OCRApp(QWidget):
         )
         self.image_preview.setMinimumHeight(200)
         self.image_preview.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Expanding)
+            QSizePolicy.Expanding, QSizePolicy.Expanding
+        )
         sidebar_vbox.addWidget(self.image_preview, 6)
 
         sidebar_vbox.addSpacing(18)
@@ -172,10 +179,9 @@ class OCRApp(QWidget):
         self.progress_bar_preview.setTextVisible(True)
         self.progress_bar_preview.setFixedHeight(32)
         self.progress_bar_preview.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.progress_bar_preview.setFormat(
-            "%p%")  # سيظهر فقط النسبة (مثلاً "0%")
-        # هنا: محاذاة النسبة لليسار مع padding مناسب + لون رصاصي خافت
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )
+        self.progress_bar_preview.setFormat("%p%")
         self.progress_bar_preview.setStyleSheet("""
             QProgressBar {
                 font-size: 16px;
@@ -201,7 +207,8 @@ class OCRApp(QWidget):
         logo_pixmap = QPixmap("logos.png")
         if not logo_pixmap.isNull():
             logo_pixmap = logo_pixmap.scaled(
-                65, 65, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                65, 65, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
             logo_label.setPixmap(logo_pixmap)
         logo_label.setAlignment(Qt.AlignHCenter)
         sidebar_vbox.addWidget(logo_label)
@@ -227,19 +234,23 @@ class OCRApp(QWidget):
         sidebar_vbox.addSpacing(5)
 
         sidebar_footer = QLabel(
-            "E-mail: hejazi.mohamed@gmail.com   واتساب: 0927232437")
+            "E-mail: hejazi.mohamed@gmail.com   واتساب: 0927232437"
+        )
         sidebar_footer.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         sidebar_footer.setStyleSheet(
-            "background: transparent; color:#222; font-size:11px; padding:5px 8px;")
+            "background: transparent; color:#222; font-size:11px; padding:5px 8px;"
+        )
         sidebar_vbox.addWidget(sidebar_footer)
 
         right_panel = QWidget()
         right_vbox = QVBoxLayout(right_panel)
         right_vbox.setContentsMargins(0, 0, 0, 0)
         right_vbox.setSpacing(0)
+
         self.output_box = QTextEdit()
         self.output_box.setPlaceholderText(
-            "سيظهر النص المستخرج هنا بعد المعالجة...")
+            "سيظهر النص المستخرج هنا بعد المعالجة..."
+        )
         self.output_box.setAlignment(Qt.AlignRight)
         self.output_box.setStyleSheet("""
             QTextEdit {
@@ -259,7 +270,8 @@ class OCRApp(QWidget):
 
     def import_image(self):
         file_name, _ = QFileDialog.getOpenFileName(
-            self, "اختر صورة", "", "Images (*.png *.jpg *.jpeg *.bmp)")
+            self, "اختر صورة", "", "Images (*.png *.jpg *.jpeg *.bmp)"
+        )
         if file_name:
             pixmap = QPixmap(file_name)
             if not pixmap.isNull():

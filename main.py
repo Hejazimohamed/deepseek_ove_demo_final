@@ -139,7 +139,6 @@ if __name__ == "__main__":
         log_user_event("تم تشغيل التطبيق بنجاح.")
     except Exception:
         pass
-
     # حماية من تشغيل عدة QApplication أو الاستيراد كموديل
     try:
         from PyQt5.QtWidgets import QApplication
