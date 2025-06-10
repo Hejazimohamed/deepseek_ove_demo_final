@@ -1,5 +1,12 @@
-import concurrent.futures
-from ocr import extract_text_from_image  # دالة ocr الخاصة بك
+﻿import concurrent.futures
+from PIL import Image
+import pytesseract
+
+
+def extract_text_from_image(image_path):
+    """قراءة النص من الصورة باستخدام Tesseract."""
+    img = Image.open(image_path)
+    return pytesseract.image_to_string(img, lang='eng+ara')
 
 
 def process_images_parallel(image_paths):
