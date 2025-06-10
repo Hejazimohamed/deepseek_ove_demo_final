@@ -13,3 +13,5 @@ pytesseract
 easyocr
 pytest>=7.0
 pytest-qt>=4.0
+packaging>=23.0
+gnupg             # إذا لم يكن مسجّلاً
