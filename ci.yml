@@ -1,45 +1,46 @@
-﻿name: CI
+name: CI
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ main, master, codex-fixes ]
   pull_request:
+    branches: [ main, master ]
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      # 1) جلب الشيفرة
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      # 2) إعداد Python
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: "3.9"
 
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
+      # 3) تثبيت اعتمادات الإنتاج
+      - name: Install production dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-qt flake8 mypy
 
+      # 4) تثبيت أدوات التطوير وملفات stubs (بدون جرّ تبعيات)
+      - name: Install dev dependencies
+        run: |
+          pip install --no-deps mypy types-requests flake8 pytest
+
+      # 5) فحص الأسلوب (Lint) بواسطة flake8
       - name: Lint with flake8
         run: flake8 . --max-line-length=120 --ignore=E203,W503,E501,F401,F841,E302,E305,E303,W292,E226,E701
 
+      # 6) فحص الأنواع (mypy) مع استثناء مجلدات الأرشيف/الاختبارات
       - name: Type-check with mypy
-        # نستثني مجلدي tests و zip لتجنب Duplicate module error
-        run: mypy --ignore-missing-imports --exclude '^(tests|zip)/' .
+        # نستثني tests و zip و images_fpr_test لتجنّب Duplicate module
+        run: mypy --ignore-missing-imports --exclude '^(tests|zip|images_fpr_test)/' .
 
+      # 7) تشغيل اختبارات الوحدة
       - name: Run tests
         run: pytest --maxfail=1 --disable-warnings -q
