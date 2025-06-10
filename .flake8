@@ -16,14 +16,14 @@ max-line-length = 120
 
 # نتجاهل هذه القواعد حتى لا تظهر أخطاء تتعلّق بالمسافات والأسطر الفارغة
 ignore =
-    E203,   # whitespace before ':'
-    W503,   # line break before binary operator
-    E501,   # line too long
-    F401,   # imported but unused
-    F841,   # local variable assigned but never used
-    E302,   # expected 2 blank lines before top-level definitions
-    E305,   # expected 2 blank lines after class or function definition
-    E303,   # too many blank lines
-    W292,   # no newline at end of file
-    E226,   # missing whitespace around arithmetic operator
-    E701    # multiple statements on one line (colon)
+    E203   
+    W503   
+    E501  
+    F401   
+    F841   
+    E302   
+    E305   
+    E303   
+    W292   
+    E226   
+    E701    
