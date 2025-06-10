@@ -1,5 +1,8 @@
-﻿# ملف ocr_modern_ui.py
+import os
 import sys
+#  لا تشغل التطبيق إذا كنا داخل بيئة GitHub Actions (مثل CI)
+if os.environ.get("CI") == "true":
+    sys.exit("⛔ تشغيل PyQt GUI موقوف داخل بيئة CI (GitHub Actions)")
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QComboBox, QCheckBox,
     QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QFileDialog, QSizePolicy
