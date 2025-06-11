@@ -27,6 +27,10 @@ import cv2
 from backup_manager import BackupManager
 from settings_manager import SettingsManager
 from updater import UpdateChecker, UpdateApplier
+from ocr_modern_ui import button_style, report_btn_style, update_btn_style
+from ocr_logic import EasyOCRSingleton, open_multi_page_image
+from image_preprocess import preprocess_image_advanced
+
 
 # —— تحميل متغيرات البيئة للبريد —— #
 load_dotenv()
@@ -360,6 +364,7 @@ class OCRWorker(QThread):
                 try:
                     if self.engine in ["Tesseract", "كلاهما"]:
                         import pytesseract
+
                         cfg = "--oem 3 --psm 6"
                         text_block += pytesseract.image_to_string(
                             proc, lang=self.lang, config=cfg).strip()
@@ -415,67 +420,6 @@ class OCRMainWindow(QMainWindow):
 
     def _build_ui(self):
         # أنماط الأزرار
-        button_style = """
-        QPushButton {
-            background: qlineargradient(
-                spread:pad,
-                x1:0, y1:0, x2:1, y2:1,
-                stop:0 #ffe29f, stop:1 #ffc700
-            );
-            color: #7c4a02;
-            border: 1px solid #ffe29f;
-            border-radius: 7px;
-            font-size: 12px;
-            padding: 4px 14px;
-            font-weight: bold;
-            margin: 2px 2px;
-            min-width: 70px;
-            max-width: 110px;
-        }
-        QPushButton:hover {
-            background: qlineargradient(
-                spread:pad,
-                x1:0, y1:0, x2:1, y2:1,
-                stop:0 #ffe29f, stop:1 #ffd700
-            );
-            color: #8b6a00;
-        }
-        QPushButton:pressed {
-            background: #ffd700;
-        }
-        """
-
-        report_btn_style = """
-        QPushButton {
-            background: #FFFACD;
-            color: #AA8800;
-            font-weight: bold;
-            font-size: 12px;
-            border-radius: 6px;
-            border: none;
-            padding: 4px 0;
-            min-height: 18px;
-        }
-        QPushButton:hover {
-            background-color: #ffe066;
-        }
-        """
-
-        update_btn_style = """
-        QPushButton {
-            background: #E0FFFF;
-            color: #008B8B;
-            font-weight: bold;
-            font-size: 12px;
-            border-radius: 6px;
-            border: none;
-            padding: 4px 0;
-            min-height: 18px;
-        }
-        QPushButton:hover {
-            background-color: #b2ebf2;
-        }
-        """
 
         # إنشاء الواجهة الرئيسية
         central = QWidget()

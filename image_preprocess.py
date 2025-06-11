@@ -1,4 +1,4 @@
-﻿from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter
 import cv2
 import numpy as np
 
@@ -6,9 +6,10 @@ def preprocess_image_advanced(image_path):
     """
     تحسين الصورة عبر مجموعة من الفلاتر لتحسين نتائج OCR.
     """
+
     # فتح الصورة وتحويلها إلى تدرج الرمادي
     image = Image.open(image_path).convert("L")
-    
+
     # تطبيق فلتر تقليل الضوضاء
     image = image.filter(ImageFilter.MedianFilter())
 
