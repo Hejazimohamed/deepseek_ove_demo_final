@@ -291,8 +291,12 @@ class OCRApp(QWidget):
             self.image_preview.setText("لم يتم تحميل صورة بعد")
 
 
+
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    ocr_app = OCRApp()
-    ocr_app.show()
-    sys.exit(app.exec_())
+    if os.environ.get("CI") == "true":
+        print("⛔ لن يتم تشغيل PyQt GUI داخل بيئة CI")
+    else:
+        app = QApplication(sys.argv)
+        ocr_app = OCRApp()
+        ocr_app.show()
+        sys.exit(app.exec_())
