@@ -27,20 +27,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4) تثبيت أدوات التطوير وملفات stubs (بدون جرّ تبعيات)
+      # 4) تثبيت أدوات التطوير وملفات stubs
       - name: Install dev dependencies
         run: |
-          pip install --no-deps mypy types-requests flake8 pytest
+          pip install --no-deps mypy types-requests flake8 pytest pytest-qt
 
-      # 5) فحص الأسلوب (Lint) بواسطة flake8
+      # 5) تثبيت Xvfb لدعم اختبارات Qt
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      # 6) فحص الأسلوب (Lint)
       - name: Lint with flake8
         run: flake8 . --max-line-length=120 --ignore=E203,W503,E501,F401,F841,E302,E305,E303,W292,E226,E701
 
-      # 6) فحص الأنواع (mypy) مع استثناء مجلدات الأرشيف/الاختبارات
+      # 7) فحص الأنواع (mypy)
       - name: Type-check with mypy
-        # نستثني tests و zip و images_fpr_test لتجنّب Duplicate module
         run: mypy --ignore-missing-imports --exclude '^(tests|zip|images_fpr_test)/' .
 
-      # 7) تشغيل اختبارات الوحدة
-      - name: Run tests
-        run: pytest --maxfail=1 --disable-warnings -q
+      # 8) تشغيل الاختبارات داخل بيئة افتراضية
+      - name: Run tests with virtual display
+        run: xvfb-run -a pytest --maxfail=1 --disable-warnings -q
