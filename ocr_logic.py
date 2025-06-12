@@ -14,17 +14,15 @@ def configure_tesseract():
     possible_paths = [
         '/usr/bin/tesseract',
         '/usr/local/bin/tesseract',
-        '/opt/homebrew/bin/tesseract',  # For macOS Homebrew
-        'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'  # Windows
+        '/opt/homebrew/bin/tesseract',
+        'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
     ]
     
-    # Check environment variable first
     tesseract_cmd = os.environ.get('TESSERACT_CMD')
     if tesseract_cmd and os.path.exists(tesseract_cmd):
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         return
 
-    # Check default paths
     for path in possible_paths:
         if os.path.exists(path):
             pytesseract.pytesseract.tesseract_cmd = path
@@ -36,7 +34,6 @@ def configure_tesseract():
 
 try:
     configure_tesseract()
-    # Verify installation
     pytesseract.get_tesseract_version()
 except Exception as e:
     logger.error(f"Tesseract configuration failed: {str(e)}")
