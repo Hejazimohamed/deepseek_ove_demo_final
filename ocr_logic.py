@@ -1,10 +1,15 @@
-
 from PIL import Image, UnidentifiedImageError
 from image_preprocess import preprocess_image_advanced
 import pytesseract
-if not pytesseract.get_tesseract_version():
-    raise EnvironmentError("Tesseract OCR غير مثبت أو غير مضاف للمسار.")
 
+# يجب وضع هذا في بداية الملف بعد الاستيرادات
+pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'  # تحديد المسار صراحةً
+
+try:
+    if not pytesseract.get_tesseract_version():
+        raise EnvironmentError("Tesseract OCR غير مثبت أو غير مضاف للمسار.")
+except pytesseract.TesseractNotFoundError:
+    raise EnvironmentError("Tesseract OCR غير مثبت أو غير مضاف للمسار.")
 
 class EasyOCRSingleton:
     _instance = None
