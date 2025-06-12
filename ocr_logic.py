@@ -1,37 +1,46 @@
-from PIL import Image, UnidentifiedImageError
+﻿from PIL import Image, UnidentifiedImageError
 from image_preprocess import preprocess_image_advanced
 import pytesseract
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TesseractNotConfiguredError(Exception):
-    """استثناء مخصص لأخطاء تكوين Tesseract"""
     pass
 
 def configure_tesseract():
-    """دالة لضبط مسار Tesseract بشكل ديناميكي"""
-    # قائمة بالمسارات المحتملة لـ Tesseract
+    """Configure Tesseract path dynamically"""
     possible_paths = [
         '/usr/bin/tesseract',
         '/usr/local/bin/tesseract',
-        'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+        '/opt/homebrew/bin/tesseract',  # For macOS Homebrew
+        'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'  # Windows
     ]
     
-    # التحقق من وجود Tesseract في المسارات المحددة
+    # Check environment variable first
+    tesseract_cmd = os.environ.get('TESSERACT_CMD')
+    if tesseract_cmd and os.path.exists(tesseract_cmd):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        return
+
+    # Check default paths
     for path in possible_paths:
         if os.path.exists(path):
             pytesseract.pytesseract.tesseract_cmd = path
             return
-    
+
     raise TesseractNotConfiguredError(
-        "لم يتم العثور على Tesseract في المسارات المتوقعة.\n"
-        "يرجى تثبيت Tesseract أو ضبط المسار يدويًا."
+        "Tesseract not found. Please install it or set TESSERACT_CMD environment variable."
     )
 
 try:
     configure_tesseract()
+    # Verify installation
     pytesseract.get_tesseract_version()
-except (pytesseract.TesseractNotFoundError, TesseractNotConfiguredError) as e:
-    raise TesseractNotConfiguredError(str(e))
+except Exception as e:
+    logger.error(f"Tesseract configuration failed: {str(e)}")
+    raise TesseractNotConfiguredError(f"Tesseract OCR is not properly configured: {str(e)}")
 
 class EasyOCRSingleton:
     _instance = None
@@ -45,16 +54,17 @@ def open_multi_page_image(path):
     try:
         return Image.open(path)
     except UnidentifiedImageError:
-        raise ValueError("تعذر فتح الملف كصورة متعددة الصفحات")
+        raise ValueError("Cannot open file as multi-page image")
 
 def extract_text_from_image(image_path):
     try:
         img = preprocess_image_advanced(image_path)
     except Exception as e:
-        print(f"⚠️ خطأ في التحسين المسبق للصورة: {e}")
+        logger.warning(f"Image preprocessing failed: {e}")
         img = Image.open(image_path)
     
     try:
         return pytesseract.image_to_string(img, lang='eng+ara')
-    except pytesseract.TesseractNotFoundError:
-        raise TesseractNotConfiguredError("فشل في استدعاء Tesseract أثناء معالجة الصورة")
+    except Exception as e:
+        logger.error(f"OCR processing failed: {e}")
+        raise TesseractNotConfiguredError(f"OCR processing error: {str(e)}")
