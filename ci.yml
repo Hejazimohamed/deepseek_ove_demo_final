@@ -1,10 +1,10 @@
-name: CI
+﻿name: Python CI
 
 on:
   push:
     branches: [ main, master, codex-fixes ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, codex-fixes ]
 
 jobs:
   build:
@@ -19,33 +19,31 @@ jobs:
       - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: '3.9'
 
-      # 3) تثبيت اعتمادات الإنتاج
-      - name: Install production dependencies
+      # 3) تثبيت الاعتمادات
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install mypy flake8 pytest pytest-qt
 
-      # 4) تثبيت أدوات التطوير وملفات stubs
-      - name: Install dev dependencies
-        run: |
-          pip install --no-deps mypy types-requests flake8 pytest pytest-qt
+      # 4) تثبيت Tesseract OCR
+      - name: Install Tesseract OCR
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
 
-      # 5) تثبيت Xvfb لدعم اختبارات Qt
+      # 5) تثبيت Xvfb لدعم واجهات Qt
       - name: Install Xvfb
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+        run: sudo apt-get install -y xvfb
 
-      # 6) فحص الأسلوب (Lint)
-      - name: Lint with flake8
+      # 6) فحص الأسلوب (flake8)
+      - name: Run flake8
         run: flake8 . --max-line-length=120 --ignore=E203,W503,E501,F401,F841,E302,E305,E303,W292,E226,E701
 
       # 7) فحص الأنواع (mypy)
-      - name: Type-check with mypy
-        run: mypy --ignore-missing-imports --exclude '^(tests|zip|images_fpr_test)/' .
+      - name: Run mypy
+        run: mypy --config-file mypy.ini --exclude '^(tests|zip|images_fpr_test)/' .
 
-      # 8) تشغيل الاختبارات داخل بيئة افتراضية
+      # 8) تشغيل الاختبارات
       - name: Run tests with virtual display
         run: xvfb-run -a pytest --maxfail=1 --disable-warnings -q

@@ -1,0 +1,29 @@
+[flake8]
+# استثناء مجلدات غير ضرورية من الفحص
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    zip,
+    images_fpr_test,
+    backups,
+    tests,
+    *.zip,
+    *.log
+
+# السماح بأسطر تصل إلى 120 حرف
+max-line-length = 120
+
+# تجاهل قواعد محددة لتقليل الإنذارات غير الضرورية
+ignore =
+    E203
+    W503
+    E501
+    F401
+    F841
+    E302
+    E305
+    E303
+    W292
+    E226
+    E701
