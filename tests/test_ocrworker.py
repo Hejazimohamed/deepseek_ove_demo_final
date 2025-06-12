@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from PyQt5.QtCore import QThread
 from PIL import Image
 from ocr_worker import OCRWorker

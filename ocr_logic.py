@@ -1,4 +1,4 @@
-﻿from PIL import Image, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 from image_preprocess import preprocess_image_advanced
 import pytesseract
 import os
