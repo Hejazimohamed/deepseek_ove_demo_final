@@ -1,4 +1,4 @@
-﻿name: Python CI
+name: Python CI
 
 on:
   push:
@@ -28,9 +28,11 @@ jobs:
           pip install -r requirements.txt
           pip install mypy flake8 pytest pytest-qt
 
-      # 4) تثبيت Tesseract OCR
+      # 4) تثبيت Tesseract OCR مع حزم إضافية
       - name: Install Tesseract OCR
-        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr libtesseract-dev tesseract-ocr-ara  # أضف لغات أخرى هنا
 
       # 5) تثبيت Xvfb لدعم واجهات Qt
       - name: Install Xvfb
