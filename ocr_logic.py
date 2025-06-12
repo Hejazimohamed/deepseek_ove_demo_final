@@ -1,15 +1,37 @@
 from PIL import Image, UnidentifiedImageError
 from image_preprocess import preprocess_image_advanced
 import pytesseract
+import os
 
-# تحديد المسار الصريح لـ Tesseract (ضروري لـ GitHub Actions)
-pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+class TesseractNotConfiguredError(Exception):
+    """استثناء مخصص لأخطاء تكوين Tesseract"""
+    pass
+
+def configure_tesseract():
+    """دالة لضبط مسار Tesseract بشكل ديناميكي"""
+    # قائمة بالمسارات المحتملة لـ Tesseract
+    possible_paths = [
+        '/usr/bin/tesseract',
+        '/usr/local/bin/tesseract',
+        'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+    ]
+    
+    # التحقق من وجود Tesseract في المسارات المحددة
+    for path in possible_paths:
+        if os.path.exists(path):
+            pytesseract.pytesseract.tesseract_cmd = path
+            return
+    
+    raise TesseractNotConfiguredError(
+        "لم يتم العثور على Tesseract في المسارات المتوقعة.\n"
+        "يرجى تثبيت Tesseract أو ضبط المسار يدويًا."
+    )
 
 try:
-    if not pytesseract.get_tesseract_version():
-        raise EnvironmentError("Tesseract OCR غير مثبت أو غير مضاف للمسار.")
-except pytesseract.TesseractNotFoundError:
-    raise EnvironmentError("Tesseract OCR غير مثبت أو غير مضاف للمسار.")
+    configure_tesseract()
+    pytesseract.get_tesseract_version()
+except (pytesseract.TesseractNotFoundError, TesseractNotConfiguredError) as e:
+    raise TesseractNotConfiguredError(str(e))
 
 class EasyOCRSingleton:
     _instance = None
@@ -31,4 +53,8 @@ def extract_text_from_image(image_path):
     except Exception as e:
         print(f"⚠️ خطأ في التحسين المسبق للصورة: {e}")
         img = Image.open(image_path)
-    return pytesseract.image_to_string(img, lang='eng+ara')
+    
+    try:
+        return pytesseract.image_to_string(img, lang='eng+ara')
+    except pytesseract.TesseractNotFoundError:
+        raise TesseractNotConfiguredError("فشل في استدعاء Tesseract أثناء معالجة الصورة")

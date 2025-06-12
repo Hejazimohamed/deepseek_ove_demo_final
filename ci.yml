@@ -1,4 +1,4 @@
-name: Python CI
+﻿name: Python CI
 
 on:
   push:
@@ -25,14 +25,18 @@ jobs:
       - name: Install Tesseract and dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y             tesseract-ocr             libtesseract-dev             tesseract-ocr-ara             tesseract-ocr-eng             tesseract-ocr-fra
+          sudo apt-get install -y tesseract-ocr libtesseract-dev tesseract-ocr-ara tesseract-ocr-eng tesseract-ocr-fra
+          tesseract --version
 
-      # 4) تحديد مسار Tesseract تلقائيًا وضبطه
-      - name: Detect and export Tesseract path
+      # 4) التحقق من تثبيت Tesseract
+      - name: Verify Tesseract installation
         run: |
-          TESS_CMD=$(which tesseract)
-          echo "Tesseract detected at: $TESS_CMD"
-          echo "TESSERACT_CMD=$TESS_CMD" >> $GITHUB_ENV
+          echo "المسار الحالي لـ Tesseract:"
+          which tesseract
+          echo "إصدار Tesseract:"
+          tesseract --version
+          echo "المحتويات في /usr/bin/:"
+          ls -la /usr/bin/ | grep tesseract
 
       # 5) تثبيت Xvfb ومكتبات Qt
       - name: Install Xvfb and Qt dependencies
