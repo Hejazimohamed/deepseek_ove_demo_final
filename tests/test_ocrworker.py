@@ -10,7 +10,7 @@ def tesseract_available():
         import pytesseract
         pytesseract.get_tesseract_version()
         return True
-    except:
+    except Exception:  # تم تحديد نوع الاستثناء بدلاً من bare except
         return False
 
 @pytest.mark.skipif(not tesseract_available(), reason="Tesseract not installed")
