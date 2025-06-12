@@ -11,55 +11,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1) جلب الشيفرة
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2) إعداد Python
       - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
-      - name: Install system dependencies
+      # 3) تثبيت Tesseract OCR مع جميع التبعيات
+      - name: Install Tesseract and dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            tesseract-ocr \
-            libtesseract-dev \
-            tesseract-ocr-ara \
-            tesseract-ocr-eng \
-            tesseract-ocr-fra \
-            xvfb \
-            libxkbcommon-x11-0 \
-            libxcb-icccm4 \
-            libxcb-image0 \
-            libxcb-keysyms1 \
-            libxcb-randr0 \
-            libxcb-render-util0 \
-            libxcb-xinerama0
+          sudo apt-get install -y             tesseract-ocr             libtesseract-dev             tesseract-ocr-ara             tesseract-ocr-eng             tesseract-ocr-fra
 
-      - name: Verify Tesseract installation
+      # 4) تحديد مسار Tesseract تلقائيًا وضبطه
+      - name: Detect and export Tesseract path
         run: |
-          which tesseract
-          tesseract --version
-          tesseract --list-langs
-          ls /usr/share/tesseract-ocr/4.00/tessdata/
+          TESS_CMD=$(which tesseract)
+          echo "Tesseract detected at: $TESS_CMD"
+          echo "TESSERACT_CMD=$TESS_CMD" >> $GITHUB_ENV
 
+      # 5) تثبيت Xvfb ومكتبات Qt
+      - name: Install Xvfb and Qt dependencies
+        run: |
+          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0
+
+      # 6) تثبيت اعتمادات Python
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install mypy flake8 pytest pytest-qt pytesseract pillow
+          pip install mypy flake8 pytest pytest-qt pytesseract
 
-      - name: Configure environment
-        run: |
-          echo "TESSERACT_CMD=/usr/bin/tesseract" >> $GITHUB_ENV
-          echo "TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata" >> $GITHUB_ENV
-
+      # 7) فحص تنسيق الكود
       - name: Run flake8
         run: flake8 . --max-line-length=120 --ignore=E203,W503,E501,F401,F841,E302,E305,E303,W292,E226,E701
 
+      # 8) فحص الأنواع
       - name: Run mypy
         run: mypy --config-file mypy.ini --exclude '^(tests|zip|images_fpr_test)/' .
 
+      # 9) تشغيل الاختبارات
       - name: Run tests
         run: xvfb-run -a pytest --maxfail=1 --disable-warnings -q

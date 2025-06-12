@@ -2,8 +2,8 @@ from PIL import Image, UnidentifiedImageError
 from image_preprocess import preprocess_image_advanced
 import pytesseract
 
-# يجب وضع هذا في بداية الملف بعد الاستيرادات
-pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'  # تحديد المسار صراحةً
+# تحديد المسار الصريح لـ Tesseract (ضروري لـ GitHub Actions)
+pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
 try:
     if not pytesseract.get_tesseract_version():
@@ -21,8 +21,7 @@ class EasyOCRSingleton:
 
 def open_multi_page_image(path):
     try:
-        img = Image.open(path)
-        return img
+        return Image.open(path)
     except UnidentifiedImageError:
         raise ValueError("تعذر فتح الملف كصورة متعددة الصفحات")
 
