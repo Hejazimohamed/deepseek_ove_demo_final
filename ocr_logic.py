@@ -1,21 +1,22 @@
-﻿from PIL import Image, UnidentifiedImageError
-from image_preprocess import preprocess_image_advanced
-import pytesseract
+# ocr_logic.py
+from PIL import Image, UnidentifiedImageError
 import os
 import logging
 import subprocess
 
 logger = logging.getLogger(__name__)
 
-
 class TesseractNotConfiguredError(Exception):
     pass
 
-
 def configure_tesseract():
-    """Configure Tesseract path dynamically with enhanced detection"""
-    tesseract_cmd = os.environ.get('TESSERACT_CMD')
+    """Configure Tesseract path dynamically"""
+    try:
+        import pytesseract
+    except ImportError:
+        raise TesseractNotConfiguredError("pytesseract package not installed")
 
+    tesseract_cmd = os.environ.get('TESSERACT_CMD')
     possible_paths = [
         '/usr/bin/tesseract',
         '/usr/local/bin/tesseract',
@@ -53,14 +54,13 @@ def configure_tesseract():
         "- Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki"
     )
 
-
 try:
     tesseract_path = configure_tesseract()
+    import pytesseract
     logger.info(f"Tesseract version: {pytesseract.get_tesseract_version()}")
 except Exception as e:
     logger.error(f"Tesseract configuration failed: {str(e)}")
-    raise TesseractNotConfiguredError(f"Tesseract OCR is not properly configured: {str(e)}")
-
+    pytesseract = None
 
 class EasyOCRSingleton:
     _instance = None
@@ -70,16 +70,18 @@ class EasyOCRSingleton:
             cls._instance = super(EasyOCRSingleton, cls).__new__(cls)
         return cls._instance
 
-
 def open_multi_page_image(path):
     try:
         return Image.open(path)
     except UnidentifiedImageError:
         raise ValueError("Cannot open file as multi-page image")
 
-
 def extract_text_from_image(image_path):
+    if pytesseract is None:
+        raise TesseractNotConfiguredError("Tesseract OCR is not properly configured")
+
     try:
+        from image_preprocess import preprocess_image_advanced
         img = preprocess_image_advanced(image_path)
     except Exception as e:
         logger.warning(f"Image preprocessing failed: {e}")
