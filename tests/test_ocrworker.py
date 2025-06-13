@@ -67,8 +67,8 @@ def test_ocr_with_invalid_image(tmp_path, qtbot, tesseract_available):
     thread = QThread()
     worker.moveToThread(thread)
 
-    captured = {"error": None}
-    worker.error.connect(lambda msg: captured.update(error=msg))
+    error_container = [None]
+    worker.error.connect(lambda msg: error_container.__setitem__(0, msg))
     thread.started.connect(worker.run)
 
     with qtbot.waitSignal(worker.error, timeout=5000):
@@ -77,4 +77,4 @@ def test_ocr_with_invalid_image(tmp_path, qtbot, tesseract_available):
     thread.quit()
     thread.wait()
 
-    assert "Cannot identify image file" in captured["error"]
+    assert "Cannot identify image file" in error_container[0]

@@ -28,9 +28,7 @@ def test_preprocess_image_advanced(test_image, tesseract_available):
     """Test image preprocessing function"""
     if not tesseract_available:
         pytest.skip("Tesseract not available")
-    
     from ocr_logic import preprocess_image_advanced
-    
     result = preprocess_image_advanced(test_image)
     assert isinstance(result, Image.Image)
     assert result.size == (100, 100)
