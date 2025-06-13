@@ -1,20 +1,29 @@
-﻿from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QCheckBox, QFileDialog,
-    QListWidget, QMessageBox, QProgressBar
-)
+from PyQt5.QtWidgets import (
+    QApplication,
+    QWidget,
+    QPushButton,
+    QVBoxLayout,
+    QCheckBox,
+    QFileDialog,
+    QListWidget,
+    QMessageBox,
+    QProgressBar)
 import concurrent.futures
 import sys
 import time
+
 
 def enhance_image_dummy(path):
     # دالة تحسين وهمية (استبدلها بدالة تحسينك الفعلية)
     time.sleep(0.5)
     return path  # في التطبيق الفعلي: أعد مسار الصورة المحسنة أو الصورة نفسها
 
+
 def extract_text_from_image_dummy(path):
     # دالة OCR وهمية (استبدلها بدالة OCR الفعلية)
     time.sleep(1.5)
     return f"النص المستخرج من {path}"
+
 
 class OCRParallelProgressWidget(QWidget):
     def __init__(self):
@@ -24,7 +33,8 @@ class OCRParallelProgressWidget(QWidget):
         self.file_list = QListWidget()
         self.enhance_checkbox = QCheckBox("تحسين الصور تلقائيًا قبل الاستخراج")
         self.enhance_checkbox.setChecked(True)
-        self.parallel_checkbox = QCheckBox("معالجة متوازية (أسرع للملفات الكثيرة)")
+        self.parallel_checkbox = QCheckBox(
+            "معالجة متوازية (أسرع للملفات الكثيرة)")
         self.parallel_checkbox.setChecked(True)
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
@@ -42,7 +52,8 @@ class OCRParallelProgressWidget(QWidget):
         self.selected_files = []
 
     def select_images(self):
-        fnames, _ = QFileDialog.getOpenFileNames(self, "اختر صور", "", "Images (*.png *.jpg *.bmp)")
+        fnames, _ = QFileDialog.getOpenFileNames(
+            self, "اختر صور", "", "Images (*.png *.jpg *.bmp)")
         if fnames:
             self.selected_files = fnames
             self.file_list.clear()
@@ -61,7 +72,8 @@ class OCRParallelProgressWidget(QWidget):
         def process_one(path):
             img_path = path
             if self.enhance_checkbox.isChecked():
-                img_path = enhance_image_dummy(path)  # استبدلها بدالتك الحقيقية
+                img_path = enhance_image_dummy(
+                    path)  # استبدلها بدالتك الحقيقية
             text = extract_text_from_image_dummy(img_path)
             return (path, text)
 
@@ -93,6 +105,7 @@ class OCRParallelProgressWidget(QWidget):
         msg = "\n\n".join([f"{path}:\n{text}" for path, text in results])
         QMessageBox.information(self, "النتائج", msg)
         self.progress_bar.setValue(0)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

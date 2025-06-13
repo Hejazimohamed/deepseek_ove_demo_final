@@ -1,4 +1,5 @@
-﻿from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton, QLabel
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton, QLabel
+
 
 class LogsDialog(QDialog):
     def __init__(self, log_file="ocr_app_errors.log"):
@@ -23,4 +24,5 @@ class LogsDialog(QDialog):
             with open(self.log_file, encoding="utf-8") as f:
                 self.text_edit.setPlainText(f.read())
         except Exception:
-            self.text_edit.setPlainText("لا يوجد سجل أخطاء بعد أو حدث خطأ في قراءة الملف.")
+            self.text_edit.setPlainText(
+                "لا يوجد سجل أخطاء بعد أو حدث خطأ في قراءة الملف.")

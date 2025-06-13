@@ -1,0 +1,25 @@
+﻿[flake8]
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    zip,
+    images_fpr_test,
+    backups,
+    tests,
+    *.zip,
+    *.log
+
+max-line-length = 120
+ignore =
+    E203
+    W503
+    E501
+    F401
+    F841
+    E302
+    E305
+    E303
+    W292
+    E226
+    E701

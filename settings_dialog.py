@@ -1,4 +1,5 @@
-﻿from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QCheckBox
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QCheckBox
+
 
 class SettingsDialog(QDialog):
     def __init__(self, settings_manager):
