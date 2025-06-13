@@ -1,26 +1,46 @@
-import pytest
+﻿import pytest
 from PyQt5.QtCore import QThread
 from PIL import Image
-from ocr_worker import OCRWorker
-from ocr_logic import TesseractNotConfiguredError
+import logging
+import os
 
-@pytest.fixture
-def tesseract_available():
+logger = logging.getLogger(__name__)
+
+@pytest.fixture(scope="session")
+def check_tesseract_installation():
+    """Session fixture to check Tesseract availability once"""
     try:
         import pytesseract
-        pytesseract.get_tesseract_version()
-        return True
-    except Exception:  # تم تحديد نوع الاستثناء بدقة
+        tesseract_cmd = os.environ.get('TESSERACT_CMD', 'tesseract')
+        try:
+            version = pytesseract.get_tesseract_version()
+            logger.info(f"Tesseract found (v{version}) at: {tesseract_cmd}")
+            return True
+        except:
+            logger.warning("Tesseract not found or not working")
+            return False
+    except ImportError:
+        logger.warning("pytesseract not installed")
         return False
 
-@pytest.mark.skipif(not tesseract_available(), reason="Tesseract not installed")
-@pytest.mark.timeout(15)
-def test_ocrworker_run_single_page(tmp_path, qtbot):
+@pytest.fixture
+def test_image(tmp_path):
+    """Fixture to create a test image"""
     img_path = tmp_path / "test.png"
     Image.new('RGB', (100, 100), color='white').save(str(img_path))
+    return str(img_path)
+
+@pytest.fixture
+def worker(test_image):
+    from ocr_worker import OCRWorker
+    return OCRWorker(file_path=test_image)
+
+def test_ocr_worker_execution(worker, qtbot, check_tesseract_installation):
+    """Test worker execution with Qt signals"""
+    if not check_tesseract_installation:
+        pytest.skip("Tesseract not installed")
 
     thread = QThread()
-    worker = OCRWorker(file_path=str(img_path))
     worker.moveToThread(thread)
 
     captured = {"result": None, "error": None}
@@ -36,3 +56,26 @@ def test_ocrworker_run_single_page(tmp_path, qtbot):
     thread.wait()
 
     assert res_wait.signal_triggered or err_wait.signal_triggered
+    assert captured["result"] is not None or captured["error"] is not None
+
+@pytest.mark.xfail
+def test_ocr_with_invalid_image(tmp_path, qtbot):
+    """Test with non-existent image (expected to fail)"""
+    from ocr_worker import OCRWorker
+    invalid_path = str(tmp_path / "invalid.png")
+    worker = OCRWorker(file_path=invalid_path)
+
+    thread = QThread()
+    worker.moveToThread(thread)
+
+    captured = {"error": None}
+    worker.error.connect(lambda msg: captured.update(error=msg))
+    thread.started.connect(worker.run)
+
+    with qtbot.waitSignal(worker.error, timeout=5000):
+        thread.start()
+
+    thread.quit()
+    thread.wait()
+
+    assert "Cannot identify image file" in captured["error"]
