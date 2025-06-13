@@ -16,7 +16,7 @@ def check_tesseract_installation():
             version = pytesseract.get_tesseract_version()
             logger.info(f"Tesseract found (v{version}) at: {tesseract_cmd}")
             return True
-        except:
+        except Exception:
             logger.warning("Tesseract not found or not working")
             return False
     except ImportError:

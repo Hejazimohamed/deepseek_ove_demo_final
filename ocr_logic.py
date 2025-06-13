@@ -1,43 +1,66 @@
-from PIL import Image, UnidentifiedImageError
+﻿from PIL import Image, UnidentifiedImageError
 from image_preprocess import preprocess_image_advanced
 import pytesseract
 import os
 import logging
+import subprocess
 
 logger = logging.getLogger(__name__)
+
 
 class TesseractNotConfiguredError(Exception):
     pass
 
+
 def configure_tesseract():
-    """Configure Tesseract path dynamically"""
+    """Configure Tesseract path dynamically with enhanced detection"""
+    tesseract_cmd = os.environ.get('TESSERACT_CMD')
+
     possible_paths = [
         '/usr/bin/tesseract',
         '/usr/local/bin/tesseract',
         '/opt/homebrew/bin/tesseract',
-        'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+        'C:\\Program Files\\Tesseract-OCR\\tesseract.exe',
+        '/bin/tesseract',
+        '/usr/share/tesseract-ocr/tesseract'
     ]
 
-    tesseract_cmd = os.environ.get('TESSERACT_CMD')
-    if tesseract_cmd and os.path.exists(tesseract_cmd):
-        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-        return
+    try:
+        cmd = 'where' if os.name == 'nt' else 'which'
+        detected_path = subprocess.check_output(
+            [cmd, 'tesseract'], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        if detected_path:
+            possible_paths.insert(0, detected_path)
+    except Exception:
+        pass
 
-    for path in possible_paths:
-        if os.path.exists(path):
-            pytesseract.pytesseract.tesseract_cmd = path
-            return
+    for path in filter(None, [tesseract_cmd] + possible_paths):
+        try:
+            if path and os.path.exists(path):
+                pytesseract.pytesseract.tesseract_cmd = path
+                logger.info(f"Using Tesseract at: {path}")
+                return path
+        except Exception as e:
+            logger.warning(f"Path check failed for {path}: {str(e)}")
+            continue
 
     raise TesseractNotConfiguredError(
-        "Tesseract not found. Please install it or set TESSERACT_CMD environment variable."
+        "Tesseract not found. Please install it or set TESSERACT_CMD environment variable.\n"
+        "Installation instructions:\n"
+        "- Linux: sudo apt install tesseract-ocr\n"
+        "- Mac: brew install tesseract\n"
+        "- Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki"
     )
 
+
 try:
-    configure_tesseract()
-    pytesseract.get_tesseract_version()
+    tesseract_path = configure_tesseract()
+    logger.info(f"Tesseract version: {pytesseract.get_tesseract_version()}")
 except Exception as e:
     logger.error(f"Tesseract configuration failed: {str(e)}")
     raise TesseractNotConfiguredError(f"Tesseract OCR is not properly configured: {str(e)}")
+
 
 class EasyOCRSingleton:
     _instance = None
@@ -47,11 +70,13 @@ class EasyOCRSingleton:
             cls._instance = super(EasyOCRSingleton, cls).__new__(cls)
         return cls._instance
 
+
 def open_multi_page_image(path):
     try:
         return Image.open(path)
     except UnidentifiedImageError:
         raise ValueError("Cannot open file as multi-page image")
+
 
 def extract_text_from_image(image_path):
     try:
