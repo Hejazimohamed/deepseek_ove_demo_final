@@ -17,7 +17,7 @@ def configure_tesseract():
         '/opt/homebrew/bin/tesseract',
         'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
     ]
-    
+
     tesseract_cmd = os.environ.get('TESSERACT_CMD')
     if tesseract_cmd and os.path.exists(tesseract_cmd):
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
@@ -59,7 +59,7 @@ def extract_text_from_image(image_path):
     except Exception as e:
         logger.warning(f"Image preprocessing failed: {e}")
         img = Image.open(image_path)
-    
+
     try:
         return pytesseract.image_to_string(img, lang='eng+ara')
     except Exception as e:
